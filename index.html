@@ -427,8 +427,7 @@ const FOTOPER = {
   dn: ["San Andreas", "Albion", "Monterey", "Cabrillo", "Alturas", "Portola", "Artesia", "Carpinteria", "Sweet Carolina"]
 };
 const VARIEDADES_BASE = [...FOTOPER.dc, ...FOTOPER.dn];
-const FOTOAPAR = ["Sana y vigorosa", "Vigor medio", "Débil", "Amarillamiento / clorosis", "Marchitez / estrés hídrico", "Daño de plaga", "Daño de enfermedad", "Daño por helada", "Fallas / mortalidad"];
-const FOTOCATS = ["Apariencia general predio", "Raíces", "Apariencia flores", "Apariencia fruta", "Problemas detectados", "Reclamo", "Otros"];
+const FOTOCATS = ["Apariencia general predio", "Planta sana y vigorosa", "Planta con vigor medio", "Planta débil", "Amarillamiento / clorosis", "Marchitez / estrés hídrico", "Daño de plaga", "Daño de enfermedad", "Daño por helada", "Fallas / mortalidad", "Raíces", "Apariencia flores", "Apariencia fruta", "Problemas detectados", "Reclamo", "Otros"];
 const nrm = x => String(x || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 function fotoper(name, v) {
   const n = nrm(name);
@@ -577,7 +576,7 @@ async function localDelete(id, tomb) {
 }
 async function storeLocalPhotos(list) {
   const out = [];
-  for (const n of list) { const id = "loc-" + newId(); await IDB.put("blobs", { id, blob: n.blob }); LOCALURL[id] = URL.createObjectURL(n.blob); out.push({ id, cat: n.cat || "", apar: n.apar || "", variedad: n.variedad || "" }); }
+  for (const n of list) { const id = "loc-" + newId(); await IDB.put("blobs", { id, blob: n.blob }); LOCALURL[id] = URL.createObjectURL(n.blob); out.push({ id, cat: n.cat || "", variedad: n.variedad || "" }); }
   return out;
 }
 async function resolveLocalPhotos(fotos) {
@@ -596,7 +595,7 @@ async function saveDoc(id, doc, nuevas) {
   if (cloudOK()) {
     try {
       const fotos = await resolveLocalPhotos(doc.fotos);
-      for (const n of nuevas) { if (!S.assets) break; const up = await S.assets.upload(n.blob, { type: "image/jpeg" }); fotos.push({ id: up.id, cat: n.cat || "", apar: n.apar || "", variedad: n.variedad || "" }); }
+      for (const n of nuevas) { if (!S.assets) break; const up = await S.assets.upload(n.blob, { type: "image/jpeg" }); fotos.push({ id: up.id, cat: n.cat || "", variedad: n.variedad || "" }); }
       await S.db.collection("visitas").doc(id).set({ ...doc, fotos });
       if (S.local.some(x => x.id === id)) { await localDelete(id); recompute(); }
       return { id, mode: "cloud" };
@@ -660,7 +659,7 @@ async function exportBackup() {
   const visitas = [];
   for (const v of S.visits) {
     const fotos = [];
-    for (const f of v.fotos) { try { let data; if (isLoc(f.id)) { const rec = await IDB.get("blobs", f.id); data = rec ? await blobToDataUrl(rec.blob) : null; } else data = (await photoData(f.id)).data; if (data) fotos.push({ cat: f.cat || "", apar: f.apar || "", variedad: f.variedad || "", data }); } catch (e) { } }
+    for (const f of v.fotos) { try { let data; if (isLoc(f.id)) { const rec = await IDB.get("blobs", f.id); data = rec ? await blobToDataUrl(rec.blob) : null; } else data = (await photoData(f.id)).data; if (data) fotos.push({ cat: f.cat || "", variedad: f.variedad || "", data }); } catch (e) { } }
     const { id, _local, fotos: _f, ...doc } = v; visitas.push({ id, doc, fotos });
   }
   const json = JSON.stringify({ app: "visitas-llahuen", version: 1, exportado: new Date().toISOString(), visitas });
@@ -676,7 +675,7 @@ async function importBackup(file) {
     const ex = byId(it.id);
     if (ex && (ex.actualizado || 0) >= ((it.doc && it.doc.actualizado) || 0)) continue;
     const list = [];
-    for (const f of it.fotos || []) { try { list.push({ blob: dataUrlToBlob(f.data), cat: f.cat, apar: f.apar, variedad: f.variedad }); } catch (e) { } }
+    for (const f of it.fotos || []) { try { list.push({ blob: dataUrlToBlob(f.data), cat: f.cat, variedad: f.variedad }); } catch (e) { } }
     const fotos = await storeLocalPhotos(list);
     await localSave(it.id, { ...it.doc, fotos }); n++;
   }
@@ -841,7 +840,7 @@ function renderDetail() {
     ${v.destacados.length ? `<div class="panel">${h3i("Puntos destacados", "flag")}<ul class="dlist">${v.destacados.map(destHtml).join("")}</ul></div>` : ""}
     ${v.notas ? `<div class="panel">${h3i("Notas de la visita", "note")}<p class="notes">${esc(v.notas)}</p></div>` : ""}
     ${v.recomendaciones ? `<div class="panel">${h3i("Recomendaciones entregadas", "leaf")}<p class="notes">${esc(v.recomendaciones)}</p></div>` : ""}
-    ${v.fotos.length ? `<div class="panel">${h3i("Fotos", "camera", `<span class="muted small mono push">${v.fotos.length}</span>`)}<div class="photo-grid">${v.fotos.map(f => `<div class="phw"><a class="ph" data-phref="${esc(f.id)}" href="${blobUrl(f.id)}" target="_blank" rel="noopener"><img loading="lazy" alt="${esc(f.cat || "Foto de la visita")}" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"></a><span class="cat">${esc(f.cat || "Sin clasificar")}</span>${f.apar ? `<span class="cat"><b>Planta:</b> ${esc(f.apar)}</span>` : ""}${f.variedad ? `<span class="cat"><b>Variedad:</b> ${esc(f.variedad)}</span>` : ""}</div>`).join("")}</div></div>` : ""}
+    ${v.fotos.length ? `<div class="panel">${h3i("Fotos", "camera", `<span class="muted small mono push">${v.fotos.length}</span>`)}<div class="photo-grid">${v.fotos.map(f => `<div class="phw"><a class="ph" data-phref="${esc(f.id)}" href="${blobUrl(f.id)}" target="_blank" rel="noopener"><img loading="lazy" alt="${esc(f.cat || "Foto de la visita")}" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"></a><span class="cat">${esc(f.cat || "Sin clasificar")}</span>${f.variedad ? `<span class="cat"><b>Variedad:</b> ${esc(f.variedad)}</span>` : ""}</div>`).join("")}</div></div>` : ""}
     <div class="h-row">
       <button class="btn primary" data-act="edit" data-id="${v.id}">Editar</button>
       <button class="btn" data-act="again" data-id="${v.id}">Nueva visita a este cliente</button>
@@ -979,14 +978,13 @@ function renderDest() {
 }
 function renderPhotos() {
   const F = S.form, g = $("#photogrid");
-  const catSel = (kind, i, cur) => `<select data-fc="${kind}" data-i="${i}" aria-label="Categoría de la foto"><option value="">Sin clasificar</option>${FOTOCATS.map(c => `<option ${c === cur ? "selected" : ""}>${c}</option>`).join("")}</select>`;
-  const aparSel = (kind, i, cur) => `<select data-fa="${kind}" data-i="${i}" aria-label="Apariencia de la planta"><option value="">Apariencia de la planta…</option>${FOTOAPAR.map(c => `<option ${c === cur ? "selected" : ""}>${c}</option>`).join("")}</select>`;
-  const varSel = (kind, i, cur) => { const L = [...F.variedades]; if (cur && !L.includes(cur)) L.push(cur); return `<select data-fv="${kind}" data-i="${i}" aria-label="Variedad de la foto"><option value="">Variedad…</option>${L.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`; };
-  const old = F.fotos.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto guardada" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"><button type="button" data-act="rmfoto" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("old", i, f.cat)}${aparSel("old", i, f.apar)}${varSel("old", i, f.variedad)}</div>`).join("");
-  const nu = F.nuevas.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto nueva" src="${f.url}"><button type="button" data-act="rmnueva" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("new", i, f.cat)}${aparSel("new", i, f.apar)}${varSel("new", i, f.variedad)}</div>`).join("");
+  const catSel = (kind, i, cur) => `<select data-fc="${kind}" data-i="${i}" aria-label="Clasificación de la foto"><option value="">Sin clasificar</option>${FOTOCATS.map(c => `<option ${c === cur ? "selected" : ""}>${c}</option>`).join("")}</select>`;
+  const varSel = (kind, i, cur) => { const L = allVarieties().slice().sort((a, b) => a.localeCompare(b, "es")); if (cur && !L.includes(cur)) L.push(cur); return `<select data-fv="${kind}" data-i="${i}" aria-label="Variedad de la foto"><option value="">Variedad (lista)…</option>${L.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`; };
+  const old = F.fotos.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto guardada" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"><button type="button" data-act="rmfoto" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("old", i, f.cat)}${varSel("old", i, f.variedad)}</div>`).join("");
+  const nu = F.nuevas.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto nueva" src="${f.url}"><button type="button" data-act="rmnueva" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("new", i, f.cat)}${varSel("new", i, f.variedad)}</div>`).join("");
   const canUp = !!S.assets || !S.db;
   g.innerHTML = old + nu + (canUp ? `<label class="addph" id="cam-label">Tomar foto<input type="file" accept="image/*" capture="environment" id="f-cam"></label><label class="addph">Elegir de galería<input type="file" accept="image/*" multiple id="f-fotos"></label>` : "");
-  $("#photohint").textContent = canUp ? "Clasifica cada foto (categoría, apariencia de la planta y variedad) para ordenarlas en los reportes. “Tomar foto” abre la cámara y “Elegir de galería” abre tu galería. Las fotos no guardan ubicación GPS; la ubicación del predio se fija con el botón GPS." : "Solo quienes pueden editar este artefacto suben fotos. Inicia sesión como propietario para agregarlas.";
+  $("#photohint").textContent = canUp ? "Clasifica cada foto (apariencia de la planta, raíces, flores, fruta, problemas, etc.) y elige su variedad para ordenarlas en los reportes. “Tomar foto” abre la cámara y “Elegir de galería” abre tu galería. Las fotos no guardan ubicación GPS; la ubicación del predio se fija con el botón GPS." : "Solo quienes pueden editar este artefacto suben fotos. Inicia sesión como propietario para agregarlas.";
 }
 function parseCoords(txt) {
   const m = String(txt || "").replace(/[−–]/g, "-").match(/-?\d+(?:[.,]\d+)?/g);
@@ -1108,7 +1106,7 @@ async function compress(file) {
 async function addPhotos(files) {
   const F = S.form;
   for (const file of files) {
-    try { const blob = await compress(file); F.nuevas.push({ blob, url: URL.createObjectURL(blob), cat: "", apar: "", variedad: "" }); }
+    try { const blob = await compress(file); F.nuevas.push({ blob, url: URL.createObjectURL(blob), cat: "", variedad: "" }); }
     catch (e) { toast("No se pudo leer una de las fotos (¿formato HEIC?). Usa JPG o PNG."); }
   }
   renderPhotos();
@@ -1991,7 +1989,7 @@ async function buildPptx(vs, setProgress) {
     paged("Clientes estratégicos", rng, ["Cliente", "Región", "Última visita", "Estado", "Reclamos abiertos", "Próxima visita"], rows, [3.4, 2.2, 1.9, 1.5, 1.8, 1.8], 9, "Ningún cliente marcado como estratégico."); }
 
   // 9. fotografías clasificadas
-  const fotos = vs.flatMap(v => v.fotos.map(f => ({ id: f.id, cat: FOTOCATS.includes(f.cat) ? f.cat : "Otros", apar: f.apar || "", variedad: f.variedad || "", v }))).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha));
+  const fotos = vs.flatMap(v => v.fotos.map(f => ({ id: f.id, cat: FOTOCATS.includes(f.cat) ? f.cat : "Otros", variedad: f.variedad || "", v }))).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha));
   let done = 0;
   if (fotos.length) {
     const intro = slide("Registro fotográfico", `${fotos.length} fotografías clasificadas por categoría`);
@@ -2007,7 +2005,7 @@ async function buildPptx(vs, setProgress) {
           s.addShape(pptx.ShapeType.rect, { x: bx, y: by, w: bw, h: bh, fill: { color: PPT.soft }, line: { color: PPT.line, width: 0.75 } });
           if (img) { const k = Math.min(bw / img.w, bh / img.h), w = img.w * k, h = img.h * k; s.addImage({ data: img.data, x: bx + (bw - w) / 2, y: by + (bh - h) / 2, w, h }); }
           else s.addText("Foto no disponible", { x: bx, y: by, w: bw, h: bh, fontSize: 11, color: PPT.muted, align: "center", valign: "middle" });
-          s.addText(`${f.v.cliente} · ${f.v.region}\n${fmtD(f.v.fecha)}${f.variedad ? " · " + f.variedad : (f.v.variedades.length ? " · " + f.v.variedades.join(", ") : "")}${f.apar ? "\nPlanta: " + f.apar : ""}`, { x: bx, y: by + bh + 0.03, w: bw, h: 0.5, fontSize: 10, color: PPT.ink, fontFace: "Calibri", valign: "top" });
+          s.addText(`${f.v.cliente} · ${f.v.region}\n${fmtD(f.v.fecha)}${f.variedad ? " · " + f.variedad : (f.v.variedades.length ? " · " + f.v.variedades.join(", ") : "")}`, { x: bx, y: by + bh + 0.03, w: bw, h: 0.5, fontSize: 10, color: PPT.ink, fontFace: "Calibri", valign: "top" });
           done++; if (setProgress) setProgress(done, fotos.length);
         }
       }
@@ -2152,7 +2150,7 @@ document.addEventListener("input", ev => {
 document.addEventListener("change", ev => {
   const t = ev.target;
   if (t.id === "f-import") { if (t.files[0]) importBackup(t.files[0]); t.value = ""; return; }
-  if ((t.dataset.fa || t.dataset.fv) && S.form) { const k = t.dataset.fa || t.dataset.fv, arr = k === "old" ? S.form.fotos : S.form.nuevas; arr[+t.dataset.i][t.dataset.fa ? "apar" : "variedad"] = t.value; return; }
+  if (t.dataset.fv && S.form) { const arr = t.dataset.fv === "old" ? S.form.fotos : S.form.nuevas; arr[+t.dataset.i].variedad = t.value; return; }
   if (t.dataset.fc && S.form) { const arr = t.dataset.fc === "old" ? S.form.fotos : S.form.nuevas; arr[+t.dataset.i].cat = t.value; return; }
   if (t.dataset.gact === "dest") {
     patchDest(t.dataset.id, +t.dataset.i, (() => {
