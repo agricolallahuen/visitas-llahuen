@@ -511,11 +511,21 @@ const openRecCount = v => (v.destacados || []).filter(openRec).length;
 const hasReclamo = v => (v.destacados || []).some(d => d.tipo === "Reclamo");
 const estadoVar = (v, n) => ((v.evalVar || {})[n] || {}).estado || v.estado || "";
 const reclamosOf = vs => vs.flatMap(v => (v.destacados || []).map((d, i) => ({ v, i, d })).filter(x => x.d.tipo === "Reclamo"));
+const SINVAR = "Sin variedad indicada";
+const repoTxt = d => d && d.tipo === "Reclamo" && d.repo ? `${nfmt(Number(d.repoCant) || 0)} plantas${(d.repoVar || d.variedad) ? " de " + (d.repoVar || d.variedad) : ""}` : "";
+function haVars(c) {
+  const u = c.ultima, vars = u.variedades || [], tot = Number(u.superficie) || 0, ev = u.evalVar || {}, out = {};
+  if (!vars.length) return out;
+  const ex = vars.filter(n => Number((ev[n] || {}).ha) > 0), exSum = ex.reduce((a, n) => a + Number(ev[n].ha), 0), rest = vars.filter(n => !ex.includes(n));
+  const share = rest.length ? Math.max(0, tot - exSum) / rest.length : 0;
+  ex.forEach(n => { out[n] = Number(ev[n].ha); }); rest.forEach(n => { out[n] = share; });
+  return out;
+}
 const oportOf = vs => vs.flatMap(v => (v.destacados || []).map((d, i) => ({ v, i, d })).filter(x => x.d.tipo === "Oportunidad"));
 function recurrentes(items) {
   const m = new Map();
   for (const it of items) {
-    const vars = it.v.variedades.length ? it.v.variedades : ["(sin variedad)"];
+    const vars = it.d.variedad ? [it.d.variedad] : (it.v.variedades.length ? it.v.variedades : ["(sin variedad)"]);
     for (const va of vars) {
       const k = (it.d.categoria || "Otro") + "|" + va;
       const g = m.get(k) || { cat: it.d.categoria || "Otro", variedad: va, items: [] };
@@ -795,6 +805,8 @@ function destHtml(d) {
   let extra = "";
   if (d.tipo === "Reclamo") extra = `<div class="muted small">${esc(d.categoria || "")} · <b>${esc(d.estado)}</b>${d.ventas ? " · coordinado con Ventas" : ""}${d.resolucion ? "<br>Resolución: " + esc(d.resolucion) : ""}</div>`;
   if (d.tipo === "Oportunidad") extra = `<div class="muted small">${esc(d.sub || "")} · <b>${esc(d.estado)}</b>${d.derivadaFecha ? " (" + fmtD(d.derivadaFecha) + ")" : ""}</div>`;
+  if (d.variedad) extra += `<div class="muted small">Variedad: <b>${esc(d.variedad)}</b></div>`;
+  if (repoTxt(d)) extra += `<div class="muted small"><b>Reposición solicitada:</b> ${esc(repoTxt(d))}</div>`;
   return `<li><span class="pill t-${d.tipo}">${esc(d.tipo)}</span><span>${esc(d.texto)}${extra}</span></li>`;
 }
 function renderDetail() {
@@ -806,7 +818,7 @@ function renderDetail() {
     ["Predio", v.predio || "—"], ["Contacto", v.contacto || "—"], ["Superficie", v.superficie ? nfmt(v.superficie) + " ha" : "—"],
     ["Plantación", fmtD(v.plantacion)], ["Etapa", v.etapa || "—"], ["Próxima visita", fmtD(v.proxima)]
   ].map(([k, x]) => `<div><span>${k}</span><b>${esc(x)}</b></div>`).join("");
-  const evs = v.variedades.filter(n => v.evalVar[n]).map(n => { const e = v.evalVar[n]; return `<li><span class="pill e-${e.estado || "Regular"}" style="${e.estado ? "" : "--c:var(--muted)"}">${esc(n)}${e.estado ? " · " + esc(e.estado) : ""}</span><span>${(e.anios || []).length ? `<b>${anioTxt(e.anios)} año de plantación</b> ` : ""}${esc(e.resultado || "")}${e.nueva ? `<div class="muted small">Variedad nueva · ${esc(e.adopcion || "En evaluación")}${e.protocolo ? " · protocolo entregado" : ""}</div>` : ""}</span></li>`; }).join("");
+  const evs = v.variedades.filter(n => v.evalVar[n]).map(n => { const e = v.evalVar[n]; return `<li><span class="pill e-${e.estado || "Regular"}" style="${e.estado ? "" : "--c:var(--muted)"}">${esc(n)}${e.estado ? " · " + esc(e.estado) : ""}</span><span>${(e.anios || []).length ? `<b>${anioTxt(e.anios)} año de plantación</b> ` : ""}${esc(e.resultado || "")}${e.ha ? `<div class="muted small">${nfmt(e.ha)} ha de esta variedad</div>` : ""}${e.nueva ? `<div class="muted small">Variedad nueva · ${esc(e.adopcion || "En evaluación")}${e.protocolo ? " · protocolo entregado" : ""}</div>` : ""}</span></li>`; }).join("");
   el.innerHTML = `
     <div class="h-row"><button class="btn ghost" data-act="go" data-v="list">← Visitas</button>
       <span>${v.ejemplo ? '<span class="ejemplo">EJEMPLO</span>' : ""}</span></div>
@@ -938,6 +950,7 @@ function renderEvalVars() {
         <div class="field"><label>Estado</label><select data-ev="${i}" data-k="estado" aria-label="Estado de ${esc(n)}"><option value="">Sin evaluar</option>${ESTADOS.map(x => `<option ${x === e.estado ? "selected" : ""}>${x}</option>`).join("")}</select></div>
         <div class="field"><label>Resultado observado</label><input type="text" data-ev="${i}" data-k="resultado" value="${esc(e.resultado || "")}" placeholder="Vigor, cuajado, calibre, rendimiento" aria-label="Resultado de ${esc(n)}"></div>
       </div>
+      <div class="field"><label>Superficie de esta variedad (ha, opcional)</label><input type="number" step="0.1" min="0" inputmode="decimal" data-ev="${i}" data-k="ha" value="${esc(e.ha || "")}" aria-label="Hectáreas de ${esc(n)}"></div>
       <label class="chk"><input type="checkbox" data-ev="${i}" data-k="nueva" ${e.nueva ? "checked" : ""}> Variedad nueva en evaluación</label>
       ${e.nueva ? `<div class="grid2"><div class="field"><label>Etapa de adopción</label><select data-ev="${i}" data-k="adopcion" aria-label="Etapa de adopción de ${esc(n)}">${ADOPCION.map(x => `<option ${x === (e.adopcion || "En evaluación") ? "selected" : ""}>${x}</option>`).join("")}</select></div>
         <label class="chk"><input type="checkbox" data-ev="${i}" data-k="protocolo" ${e.protocolo ? "checked" : ""}> Protocolo de manejo entregado</label></div>` : ""}
@@ -947,12 +960,15 @@ function renderEvalVars() {
 function renderDest() {
   const F = S.form;
   const sel = (i, k, arr, cur, label) => `<select data-i="${i}" data-k="${k}" aria-label="${label}">${arr.map(t => `<option ${t === cur ? "selected" : ""}>${t}</option>`).join("")}</select>`;
+  const vsel = (i, k, cur, label, first) => `<select data-i="${i}" data-k="${k}" aria-label="${label}"><option value="">${first}</option>${uniq([...F.variedades, cur].filter(Boolean)).map(t => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>`;
   $("#destlist").innerHTML = F.destacados.map((d, i) => {
-    let extra = "";
-    if (d.tipo === "Reclamo") extra = `<div class="dextra">${sel(i, "categoria", CATEGORIAS, d.categoria, "Categoría del reclamo")}${sel(i, "estado", RECLAMO_ESTADOS, d.estado, "Estado del reclamo")}
+    let extra = `<div class="dextra">${vsel(i, "variedad", d.variedad || "", "Variedad del punto", "Variedad: general / sin indicar")}</div>`;
+    if (d.tipo === "Reclamo") extra = `<div class="dextra">${vsel(i, "variedad", d.variedad || "", "Variedad del reclamo", "Variedad del reclamo: sin indicar")}${sel(i, "categoria", CATEGORIAS, d.categoria, "Categoría del reclamo")}${sel(i, "estado", RECLAMO_ESTADOS, d.estado, "Estado del reclamo")}
+      <label class="chk"><input type="checkbox" data-i="${i}" data-k="repo" ${d.repo ? "checked" : ""}> Reposición solicitada</label>
+      ${d.repo ? `<input type="number" min="0" step="1" inputmode="numeric" data-i="${i}" data-k="repoCant" value="${esc(d.repoCant ?? "")}" placeholder="Cantidad de plantas a reponer" aria-label="Cantidad de plantas a reponer">${vsel(i, "repoVar", d.repoVar || "", "Variedad a reponer", "Variedad a reponer: la misma del reclamo")}` : ""}
       <label class="chk"><input type="checkbox" data-i="${i}" data-k="ventas" ${d.ventas ? "checked" : ""}> Coordinado con Ventas</label>
       <input type="text" data-i="${i}" data-k="resolucion" value="${esc(d.resolucion || "")}" placeholder="Acción o resolución" aria-label="Resolución"></div>`;
-    if (d.tipo === "Oportunidad") extra = `<div class="dextra">${sel(i, "sub", SUBS, d.sub, "Tipo de oportunidad")}${sel(i, "estado", OPORT_ESTADOS, d.estado, "Estado de la oportunidad")}</div>`;
+    if (d.tipo === "Oportunidad") extra = `<div class="dextra">${vsel(i, "variedad", d.variedad || "", "Variedad de la oportunidad", "Variedad: general / sin indicar")}${sel(i, "sub", SUBS, d.sub, "Tipo de oportunidad")}${sel(i, "estado", OPORT_ESTADOS, d.estado, "Estado de la oportunidad")}</div>`;
     return `<div class="dest"><select data-i="${i}" data-k="tipo" aria-label="Tipo de punto">${TIPOS_DEST.map(t => `<option ${t === d.tipo ? "selected" : ""}>${t}</option>`).join("")}</select>
       <textarea data-i="${i}" data-k="texto" style="min-height:60px" aria-label="Detalle" placeholder="${d.tipo === "Reclamo" ? "Describe el reclamo y sus antecedentes" : d.tipo === "Oportunidad" ? "Qué oportunidad comercial viste" : "Detalle"}">${esc(d.texto)}</textarea>
       <button class="btn danger" data-act="rmdest" data-i="${i}" aria-label="Quitar punto">✕</button>${extra}</div>`;
@@ -1161,13 +1177,13 @@ async function saveForm() {
   if (!F.cliente) { toast("Falta el nombre del cliente"); $("#f-cliente").focus(); return; }
   if (!F.fecha) { toast("Falta la fecha de la visita"); return; }
   if (!F.region) { toast("Selecciona la región para ordenar por zona"); $("#f-region").focus(); return; }
-  const dest = F.destacados.filter(d => d.texto.trim()).map(d => ({ ...d, texto: d.texto.trim() }));
+  const dest = F.destacados.filter(d => d.texto.trim()).map(d => ({ ...d, texto: d.texto.trim(), ...(d.tipo === "Reclamo" ? { repo: !!d.repo, repoCant: d.repo ? (Number(d.repoCant) || 0) : 0, repoVar: d.repo ? (d.repoVar || "") : "" } : {}) }));
   if (F.tipo === "Reclamo" && !dest.some(d => d.tipo === "Reclamo")) { toast("Describe el reclamo en Puntos destacados"); return; }
   if (F.lat == null) { const r = regionOf(F.region); F.lat = r.lat; F.lng = r.lng; F.coordAprox = true; }
   const btn = $("#savebtn"); btn.disabled = true; btn.textContent = "Guardando…";
   try {
     const evalVar = {};
-    for (const n of F.variedades) { const e = F.evalVar[n]; if (e && (e.estado || e.resultado || e.nueva || e.fotoper || (e.anios || []).length)) evalVar[n] = { anios: (e.anios || []).slice().sort(), fotoper: e.fotoper || "", estado: e.estado || "", resultado: e.resultado || "", nueva: !!e.nueva, adopcion: e.nueva ? (e.adopcion || "En evaluación") : "", protocolo: !!e.protocolo && !!e.nueva }; }
+    for (const n of F.variedades) { const e = F.evalVar[n]; if (e && (e.estado || e.resultado || e.nueva || e.fotoper || Number(e.ha) > 0 || (e.anios || []).length)) evalVar[n] = { ha: Number(e.ha) > 0 ? Number(e.ha) : null, anios: (e.anios || []).slice().sort(), fotoper: e.fotoper || "", estado: e.estado || "", resultado: e.resultado || "", nueva: !!e.nueva, adopcion: e.nueva ? (e.adopcion || "En evaluación") : "", protocolo: !!e.protocolo && !!e.nueva }; }
     const doc = {
       fecha: F.fecha, tipo: F.tipo, cliente: F.cliente, estrategico: !!F.estrategico, predio: F.predio, contacto: F.contacto, region: F.region, comuna: F.comuna,
       lat: F.lat, lng: F.lng, coordAprox: !!F.coordAprox, prec: F.coordAprox ? null : (F.prec || null), coordFuente: F.coordAprox ? "" : (F.coordFuente || ""), superficie: F.superficie === "" ? null : Number(F.superficie), plantacion: F.plantacion,
@@ -1214,6 +1230,7 @@ function gestReclamos() {
       return `<div class="ditem rec-item" style="--c:${c}">
         <div class="chips"><span class="pill" style="--c:${c}">${esc(d.estado)}</span><span class="chip">${esc(d.categoria || "Otro")}</span>${keys.has(key) ? '<span class="recur">Recurrente</span>' : ""}${isEstr(it.v.cliente) ? '<span class="chip estr">Estratégico</span>' : ""}</div>
         <div>${esc(d.texto)}</div>
+        ${d.variedad || d.repo ? `<div class="muted small">${d.variedad ? "Variedad: <b>" + esc(d.variedad) + "</b>" : ""}${d.repo ? `${d.variedad ? " · " : ""}<b>Reposición solicitada:</b> ${esc(repoTxt(d))}` : ""}</div>` : ""}
         <div class="by"><button class="lnk" style="background:none;border:0;padding:0;cursor:pointer;color:var(--leaf);font-weight:600;text-decoration:underline" data-act="open" data-id="${it.v.id}">${esc(it.v.cliente)}</button> · ${esc(it.v.region)} · ${fmtD(it.v.fecha)}${it.v.variedades.length ? " · " + esc(it.v.variedades.join(", ")) : ""}</div>
         <div class="rec-ctl">${sel("estado", RECLAMO_ESTADOS, d.estado)}
           <label class="chk"><input type="checkbox" data-gact="dest" data-id="${it.v.id}" data-i="${it.i}" data-k="ventas" ${d.ventas ? "checked" : ""}> Coordinado con Ventas</label>
@@ -1515,6 +1532,23 @@ function chartPresets(vs) {
     for (const c of cs) { const u = c.ultima; for (const n of u.variedades || []) for (const a of ((u.evalVar || {})[n] || {}).anios || []) { (AN[n] = AN[n] || { "1": 0, "2": 0, "3": 0 })[a]++; } }
     const an = Object.keys(AN).sort(es);
     out.push({ id: "anios", title: "Variedades por año de plantación", def: "stack", types: ["stack", "vstack"], labels: an, series: ANIOS.map(a => ({ name: a + "° año", color: yc[a], values: an.map(n => AN[n][a]) })) }); }
+  { const rec = reclamosOf(vs), vk = x => x.d.variedad || SINVAR, RCC = { "Abierto": "#BE3030", "En gestión": "#B26B00", "Resuelto": "#2E7D4F" };
+    const nm = uniq(rec.map(vk)).sort((a, b) => a === SINVAR ? 1 : b === SINVAR ? -1 : es(a, b));
+    out.push({ id: "recvar", title: "Reclamos por variedad y estado", def: "stack", types: ["stack", "vstack"], labels: nm, series: RECLAMO_ESTADOS.map(e => ({ name: e, color: RCC[e], values: nm.map(n => rec.filter(x => vk(x) === n && x.d.estado === e).length) })) });
+    const rv = {}; rec.filter(x => x.d.repo).forEach(x => { const k = x.d.repoVar || x.d.variedad || SINVAR; rv[k] = (rv[k] || 0) + (Number(x.d.repoCant) || 0); });
+    const rk = Object.keys(rv).sort((a, b) => rv[b] - rv[a]);
+    out.push({ id: "repvar", title: "Reposiciones solicitadas por variedad (plantas)", def: "hbar", types: ["hbar", "bar", "donut"], labels: rk, series: [{ name: "Plantas", values: rk.map(k => rv[k]) }], colors: rk.map((_, i) => PAL[i % PAL.length]), unit: "plantas" }); }
+  { const hv = {}; clientsOf(vs).forEach(c => { const h = haVars(c); for (const n in h) hv[n] = (hv[n] || 0) + h[n]; });
+    const hk = Object.keys(hv).filter(k => hv[k] > 0).sort((a, b) => hv[b] - hv[a]).slice(0, 12);
+    out.push({ id: "havar", title: "Hectáreas por variedad", def: "hbar", types: ["hbar", "bar", "donut"], labels: hk, series: [{ name: "Hectáreas", values: hk.map(k => Math.round(hv[k] * 10) / 10) }], colors: hk.map((_, i) => PAL[i % PAL.length]), unit: "ha", note: "Si no registras las hectáreas de cada variedad, la superficie del predio se reparte en partes iguales entre sus variedades." }); }
+  { const cnt = {}; vs.forEach(v => v.variedades.forEach(n => { cnt[n] = (cnt[n] || 0) + 1; }));
+    const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 7), oth = Object.keys(cnt).filter(n => !top.includes(n)), zl = [...ZONAS, "Sin zona"].filter(z => vs.some(v => zonaV(v) === z));
+    const ser = top.map((n, i) => ({ name: n, color: PAL[i % PAL.length], values: zl.map(z => vs.filter(v => zonaV(v) === z && v.variedades.includes(n)).length) }));
+    if (oth.length) ser.push({ name: "Otras", color: "#9AA39B", values: zl.map(z => vs.filter(v => zonaV(v) === z && v.variedades.some(n => oth.includes(n))).length) });
+    out.push({ id: "zonavar", title: "Visitas por zona y variedad", def: "stack", types: ["stack", "vstack"], labels: zl, series: ser, note: "Una visita se cuenta en cada variedad que tiene el predio." }); }
+  { const ds = vs.flatMap(v => (v.destacados || []).map(d => ({ v, d }))), vk = x => x.d.variedad || "General (sin variedad)", DCC = { "Positivo": "#2E7D4F", "Oportunidad": "#2C7FB8", "Riesgo": "#BE3030", "Reclamo": "#B26B00", "Recomendación": "#7A5BB5" };
+    const nm = uniq(ds.map(vk)).sort((a, b) => a.startsWith("General") ? 1 : b.startsWith("General") ? -1 : es(a, b));
+    out.push({ id: "destvar", title: "Puntos destacados por variedad y tipo", def: "stack", types: ["stack", "vstack"], labels: nm, series: TIPOS_DEST.map(t => ({ name: t, color: DCC[t], values: nm.map(n => ds.filter(x => vk(x) === n && x.d.tipo === t).length) })) }); }
   const rec = reclamosOf(vs), cats = uniq(rec.map(catOf));
   const RC = { "Abierto": "#BE3030", "En gestión": "#B26B00", "Resuelto": "#2E7D4F" };
   out.push({ id: "rec", title: "Reclamos por categoría y estado", def: "stack", types: ["stack", "vstack"], labels: cats, series: RECLAMO_ESTADOS.map(e => ({ name: e, color: RC[e], values: cats.map(c => rec.filter(x => catOf(x) === c && x.d.estado === e).length) })) });
@@ -1537,7 +1571,7 @@ function chartPresets(vs) {
   out.push({ id: "dest", title: "Puntos destacados por tipo", def: "bar", types: ["bar", "hbar", "donut"], labels: TIPOS_DEST, series: [{ name: "Puntos", values: TIPOS_DEST.map(t => ds.filter(d => d.tipo === t).length) }], colors: TIPOS_DEST.map(t => DC[t]), unit: "puntos" });
   return out.filter(c => c.labels.length && c.series.some(q => q.values.some(v => +v > 0)));
 }
-const CM_METRICAS = { visitas: "Visitas", clientes: "Clientes", ha: "Hectáreas", reclamos: "Reclamos", riesgos: "Riesgos", oport: "Oportunidades" };
+const CM_METRICAS = { visitas: "Visitas", clientes: "Clientes", ha: "Hectáreas", reclamos: "Reclamos", puntos: "Puntos destacados", plantas: "Plantas a reponer", riesgos: "Riesgos", oport: "Oportunidades" };
 const CM_DIMS = { zona: "Zona", region: "Región", variedad: "Variedad", cliente: "Cliente", mes: "Mes", tipo: "Tipo de visita", fotoper: "Fotoperíodo", estado: "Estado del cultivo" };
 function groupsBy(vs, d) {
   const es = (a, b) => a.localeCompare(b, "es");
@@ -1550,9 +1584,19 @@ function groupsBy(vs, d) {
   if (d === "fotoper") return ["Día corto", "Día neutro"].map(t => [t, vs.filter(v => v.variedades.some(n => fotoper(n, v) === t))]);
   return ESTADOS.map(e => [e, vs.filter(v => v.estado === e)]);
 }
-const metricOf = (m, sub) => m === "visitas" ? sub.length : m === "clientes" ? clientsOf(sub).length : m === "ha" ? haOf(clientsOf(sub)) : m === "reclamos" ? reclamosOf(sub).length : m === "riesgos" ? sumFlags(sub).r : sumFlags(sub).o;
+const metricOf = (m, sub) => m === "visitas" ? sub.length : m === "clientes" ? clientsOf(sub).length : m === "ha" ? haOf(clientsOf(sub)) : m === "reclamos" ? reclamosOf(sub).length : m === "puntos" ? sub.reduce((a, v) => a + (v.destacados || []).length, 0) : m === "plantas" ? reclamosOf(sub).reduce((a, x) => a + (x.d.repo ? Number(x.d.repoCant) || 0 : 0), 0) : m === "riesgos" ? sumFlags(sub).r : sumFlags(sub).o;
+function byVariedad(vs, m) {
+  const o = {}, add = (k, n) => { o[k] = (o[k] || 0) + n; };
+  if (m === "ha") clientsOf(vs).forEach(c => { const h = haVars(c); for (const n in h) add(n, h[n]); });
+  else if (m === "reclamos") reclamosOf(vs).forEach(x => add(x.d.variedad || SINVAR, 1));
+  else if (m === "plantas") reclamosOf(vs).forEach(x => { if (x.d.repo) add(x.d.repoVar || x.d.variedad || SINVAR, Number(x.d.repoCant) || 0); });
+  else if (m === "puntos") vs.forEach(v => (v.destacados || []).forEach(d => add(d.variedad || SINVAR, 1)));
+  else return null;
+  return Object.entries(o);
+}
 function chartCustom(vs, m, d) {
-  let g = groupsBy(vs, d).map(([l, sub]) => [l, Math.round(metricOf(m, sub) * 10) / 10]);
+  let g = (d === "variedad" && byVariedad(vs, m)) || groupsBy(vs, d).map(([l, sub]) => [l, metricOf(m, sub)]);
+  g = g.map(([l, n]) => [l, Math.round(n * 10) / 10]);
   if (d !== "mes") g = g.filter(x => x[1] > 0);
   if (d === "cliente" || d === "variedad") g = g.sort((a, b) => b[1] - a[1]).slice(0, 10);
   const colors = d === "zona" ? g.map(x => ZCOL[x[0]]) : d === "estado" ? g.map(x => ESTCOL[x[0]]) : null;
@@ -1631,16 +1675,16 @@ function drawMapCanvas(vs, w, h, th, dpr, fs) {
 }
 function repMapa(vs) {
   const cl = clientsOf(vs), sel = S.rep.mapReg;
-  const rows = [...cl].sort((a, b) => b.ultima.lat - a.ultima.lat).map(c => { const u = c.ultima; return `<tr><td>${esc(c.nombre)}</td><td>${esc(u.region)}</td><td class="num">${u.lat != null ? u.lat.toFixed(4) : ""}</td><td class="num">${u.lng != null ? u.lng.toFixed(4) : ""}</td><td>${u.coordAprox ? "aprox. (región)" : "medida"}</td></tr>`; }).join("");
+  const rows = [...cl].sort((a, b) => b.ultima.lat - a.ultima.lat).map(c => { const u = c.ultima; return `<tr><td>${esc(c.nombre)}</td><td>${esc(u.region)}</td><td>${esc((u.variedades || []).join(", ") || "—")}</td><td class="num">${u.lat != null ? u.lat.toFixed(4) : ""}</td><td class="num">${u.lng != null ? u.lng.toFixed(4) : ""}</td><td>${u.coordAprox ? "aprox. (región)" : "medida"}</td></tr>`; }).join("");
   let det = `<p class="muted small" style="margin:0">Toca una región para ver sus clientes.</p>`;
   if (sel) {
     const rv = vs.filter(v => v.region === sel), rc = clientsOf(rv);
-    det = `<div class="panel" style="margin:0"><h3 style="font-size:16px">${esc(sel)}</h3>${rc.length ? `<p class="muted small" style="margin:2px 0 8px">${rc.length} cliente(s) · ${rv.length} visita(s) · ${nfmt(haOf(rc))} ha</p>` + rc.map(c => `<div><button class="lnk" data-act="cliente" data-v="${esc(c.nombre)}">${esc(c.nombre)}</button> <span class="muted small">${nfmt(c.ultima.superficie || 0)} ha · ${c.visitas.length} visita(s)</span></div>`).join("") : `<p class="muted small" style="margin:0">Sin visitas en esta región en el periodo.</p>`}</div>`;
+    det = `<div class="panel" style="margin:0"><h3 style="font-size:16px">${esc(sel)}</h3>${rc.length ? `<p class="muted small" style="margin:2px 0 8px">${rc.length} cliente(s) · ${rv.length} visita(s) · ${nfmt(haOf(rc))} ha</p>` + rc.map(c => `<div><button class="lnk" data-act="cliente" data-v="${esc(c.nombre)}">${esc(c.nombre)}</button> <span class="muted small">${nfmt(c.ultima.superficie || 0)} ha · ${c.visitas.length} visita(s)${c.ultima.variedades.length ? " · " + esc(c.ultima.variedades.join(", ")) : ""}</span></div>`).join("") : `<p class="muted small" style="margin:0">Sin visitas en esta región en el periodo.</p>`}</div>`;
   }
   return `<div class="map-wrap"><div class="mapbox">${mapSVG(vs)}</div><div style="display:flex;flex-direction:column;gap:12px;min-width:0">
     ${det}
     <p class="muted small" style="margin:0">Dibujo simplificado de Chile continental e insular sur, con cada región en un color suave. Los puntos rojos son clientes en su última ubicación registrada (más grande = más visitas); los traslúcidos usan la capital regional porque falta la coordenada exacta. El número junto al nombre es la cantidad de clientes.</p>
-    <div class="tbl"><table data-name="coordenadas"><thead><tr><th>Cliente</th><th>Región</th><th>Latitud</th><th>Longitud</th><th>Origen</th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+    <div class="tbl"><table data-name="coordenadas"><thead><tr><th>Cliente</th><th>Región</th><th>Variedades</th><th>Latitud</th><th>Longitud</th><th>Origen</th></tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
 
 const csvCell = x => { const s = String(x ?? ""); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -1675,7 +1719,8 @@ function buildInforme(vs) {
   if (rg.length) { L.push("• Reclamos recurrentes:"); rg.forEach(g => L.push(`   - ${g.cat} · ${g.variedad}: ${g.items.length} reclamos (${uniq(g.items.map(i => i.v.cliente)).join(", ")})`)); }
   else L.push("• No hay reclamos recurrentes en el periodo.");
   const abiertos = rec.filter(x => openRec(x.d));
-  if (abiertos.length) { L.push("• Pendientes de resolver:"); abiertos.forEach(x => L.push(`   - ${x.v.cliente} (${fmtD(x.v.fecha)}) · ${x.d.categoria}: ${x.d.texto} [${x.d.estado}${x.d.ventas ? ", coordinado con Ventas" : ""}]`)); }
+  if (abiertos.length) { L.push("• Pendientes de resolver:"); abiertos.forEach(x => L.push(`   - ${x.v.cliente} (${fmtD(x.v.fecha)}) · ${x.d.categoria}: ${x.d.texto} [${x.d.estado}${x.d.ventas ? ", coordinado con Ventas" : ""}${x.d.variedad ? ", variedad " + x.d.variedad : ""}${x.d.repo ? ", reposición solicitada: " + repoTxt(x.d) : ""}]`)); }
+  { const rp = rec.filter(x => x.d.repo); if (rp.length) { const by = {}; rp.forEach(x => { const k = x.d.repoVar || x.d.variedad || SINVAR; by[k] = (by[k] || 0) + (Number(x.d.repoCant) || 0); }); L.push(`• Reposiciones solicitadas: ${nfmt(rp.reduce((a, x) => a + (Number(x.d.repoCant) || 0), 0))} plantas (${Object.entries(by).map(([k, n]) => k + ": " + nfmt(n)).join(", ")}).`); } }
   L.push("");
   const rs = vs.flatMap(v => v.destacados.filter(d => d.tipo === "Riesgo").map(d => `• ${v.cliente} (${v.region}, ${zonaV(v)}): ${d.texto}`));
   L.push("4. RIESGOS DETECTADOS", ...(rs.length ? rs : ["• Sin riesgos registrados."]), "");
@@ -1704,8 +1749,8 @@ function exportAll() {
 }
 function exportReclamos() {
   const rg = recKeys(recurrentes(reclamosOf(S.visits)));
-  const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Categoría", "Reclamo", "Estado", "Coordinado con Ventas", "Resolución", "Recurrente"];
-  saveCsv(`reclamos-llahuen-${todayISO()}.csv`, [head, ...reclamosOf(S.visits).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.categoria, x.d.texto, x.d.estado, x.d.ventas ? "Sí" : "No", x.d.resolucion, rg.has(x.v.id + "#" + x.i) ? "Sí" : ""])]);
+  const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Categoría", "Reclamo", "Estado", "Coordinado con Ventas", "Resolución", "Variedad del reclamo", "Reposición solicitada", "Plantas a reponer", "Variedad a reponer", "Recurrente"];
+  saveCsv(`reclamos-llahuen-${todayISO()}.csv`, [head, ...reclamosOf(S.visits).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.categoria, x.d.texto, x.d.estado, x.d.ventas ? "Sí" : "No", x.d.resolucion, x.d.variedad || "", x.d.repo ? "Sí" : "No", x.d.repo ? (Number(x.d.repoCant) || 0) : "", x.d.repo ? (x.d.repoVar || x.d.variedad || "") : "", rg.has(x.v.id + "#" + x.i) ? "Sí" : ""])]);
 }
 function exportOport() {
   const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Tipo", "Detalle", "Estado", "Derivada a Ventas"];
@@ -1919,9 +1964,12 @@ async function buildPptx(vs, setProgress) {
   // 3b. mapa
   { const mp = drawMapCanvas(vs, 560, 700, TH_LIGHT, 3, 17), h = 5.55, w = h * 560 / 700, s = slide("Mapa de clientes por región", "Dibujo simplificado · el número es la cantidad de clientes");
     s.addImage({ data: mp.cv.toDataURL("image/png"), x: 0.6, y: 1.3, w, h });
-    const rows = mp.regs.filter(r => r.visitas).map(r => [{ text: r.n, options: { bold: true } }, r.z, r.clientes, r.visitas, nfmt(r.ha)]);
-    if (rows.length) table(s, ["Región", "Zona", "Clientes", "Visitas", "Ha"], rows.slice(0, 11), [2.5, 1.7, 1.1, 1.0, 0.9], 1.4, 5.7);
+    const rows = mp.regs.filter(r => r.visitas).map(r => [{ text: r.n, options: { bold: true } }, r.z, r.clientes, r.visitas, nfmt(r.ha), trunc(uniq(vs.filter(v => v.region === r.n).flatMap(v => v.variedades)).sort((a, b) => a.localeCompare(b, "es")).join(", ") || "—", 30)]);
+    if (rows.length) table(s, ["Región", "Zona", "Clientes", "Visitas", "Ha", "Variedades"], rows.slice(0, 11), [1.8, 1.2, 0.9, 0.8, 0.7, 1.9], 1.4, 5.7);
     else s.addText("Sin visitas con región registrada.", { x: 6, y: 1.5, w: 6, h: 0.5, fontSize: 14, color: PPT.muted }); }
+
+  { const cl = clientsOf(vs).sort((a, b) => (b.ultima.lat || 0) - (a.ultima.lat || 0)), rows = cl.map(c => [{ text: trunc(c.nombre, 34), options: { bold: true } }, c.ultima.region, trunc((c.ultima.variedades || []).join(", ") || "—", 52), nfmt(c.ultima.superficie || 0)]);
+    paged("Clientes por región y sus variedades", "Última visita de cada cliente, de norte a sur", ["Cliente", "Región", "Variedades", "Ha"], rows, [3.6, 2.4, 5.0, 1.4], 9, "No hay clientes en el periodo."); }
 
   // 4. variedades
   { const names = uniq(vs.flatMap(v => v.variedades)).sort((a, b) => a.localeCompare(b, "es"));
@@ -1931,9 +1979,9 @@ async function buildPptx(vs, setProgress) {
 
   // 5. reclamos
   { const rec = reclamosOf(vs).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)), rg = recurrentes(rec);
-    const rows = rec.map(x => [x.v.cliente, x.d.categoria, trunc(x.d.texto, 80), { text: x.d.estado, options: { bold: true, color: x.d.estado === "Resuelto" ? EST_HEX["Excelente"] : x.d.estado === "En gestión" ? EST_HEX["Regular"] : EST_HEX["Crítico"] } }, x.d.ventas ? "Sí" : "No"]);
+    const rows = rec.map(x => [x.v.cliente, x.d.categoria, trunc(x.d.texto, 60), x.d.variedad || "—", x.d.repo ? repoTxt(x.d).replace(" plantas", " pl.") : "—", { text: x.d.estado, options: { bold: true, color: x.d.estado === "Resuelto" ? EST_HEX["Excelente"] : x.d.estado === "En gestión" ? EST_HEX["Regular"] : EST_HEX["Crítico"] } }, x.d.ventas ? "Sí" : "No"]);
     const sub = `${rec.length} reclamos · ${rec.filter(x => x.d.estado === "Abierto").length} abiertos · ${rec.filter(x => x.d.estado === "En gestión").length} en gestión · ${rec.filter(x => x.d.estado === "Resuelto").length} resueltos`;
-    paged("Reclamos y su resolución", sub, ["Cliente", "Categoría", "Reclamo", "Estado", "Con Ventas"], rows, [2.6, 2.4, 4.6, 1.5, 1.4], 7, "No hay reclamos registrados en el periodo.");
+    paged("Reclamos y su resolución", sub, ["Cliente", "Categoría", "Reclamo", "Variedad", "Reposición", "Estado", "Con Ventas"], rows, [2.0, 1.8, 3.1, 1.4, 1.7, 1.3, 1.2], 7, "No hay reclamos registrados en el periodo.");
     if (rg.length) { const s = slide("Reclamos recurrentes", "Misma categoría y variedad en 2 o más casos");
       s.addText(rg.slice(0, 8).map(g => ({ text: `${g.cat} · ${g.variedad}: ${g.items.length} reclamos (${uniq(g.items.map(i => i.v.cliente)).join(", ")})`, options: { bullet: true, breakLine: true } })), { x: 0.7, y: 1.5, w: 12, h: 4.8, fontSize: 16, color: PPT.ink, fontFace: "Calibri", valign: "top", paraSpaceAfter: 8 }); } }
 
@@ -2128,7 +2176,8 @@ document.addEventListener("change", ev => {
   if (t.dataset.ev !== undefined && S.form) { setEv(t); if (t.dataset.k === "nueva") renderEvalVars(); return; }
   if (t.dataset.i !== undefined && t.dataset.k && S.form) {
     setDest(t);
-    if (t.dataset.k === "tipo") { const d = S.form.destacados[+t.dataset.i], texto = d.texto; S.form.destacados[+t.dataset.i] = { ...newDest(d.tipo), texto }; renderDest(); }
+    if (t.dataset.k === "tipo") { const d = S.form.destacados[+t.dataset.i], texto = d.texto, variedad = d.variedad || ""; S.form.destacados[+t.dataset.i] = { ...newDest(d.tipo), texto, variedad }; renderDest(); }
+    else if (t.dataset.k === "repo") renderDest();
     return;
   }
   if (t.id === "f-zona") { S.f.zona = t.value; renderList(); }
