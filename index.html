@@ -2164,7 +2164,7 @@ document.addEventListener("change", ev => {
 /* ===================== equipo: datos compartidos con código (Supabase) ===================== */
 const CFG = window.LLAHUEN_CONFIG || {};
 const TEAM = !!(CFG.supabaseUrl && CFG.supabaseAnonKey);
-const LIB_SB = ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js", "https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"];
+const LIB_SB = ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js", "https://unpkg.com/@supabase/supabase-js@2.58.0/dist/umd/supabase.js", "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"];
 let SB = null, SB_PULL = null;
 const lsGet = k => { try { return JSON.parse(localStorage.getItem("llahuen." + k)); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem("llahuen." + k, JSON.stringify(v)); } catch (e) { } };
@@ -2262,12 +2262,12 @@ async function teamBoot() {
     await new Promise(() => { }); }
   const mk = c => window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { headers: { "x-llahuen-key": c } } });
   // true = código válido, false = incorrecto, null = no se pudo verificar (sin conexión)
-  const check = async c => { SB = mk(c); try { const r = await SB.from("directorio").select("id").eq("id", 1).maybeSingle(); if (r.error) return navigator.onLine === false ? null : (/fetch|network/i.test(r.error.message || "") ? null : false); return !!r.data; } catch (e) { return null; } };
+  let why = ""; const check = async c => { SB = mk(c); why = ""; try { const r = await SB.from("directorio").select("id").eq("id", 1).maybeSingle(); if (r.error) { why = (r.error.message || "") + (r.error.code ? " [" + r.error.code + "]" : ""); return navigator.onLine === false || /fetch|network/i.test(why) ? null : "err"; } return !!r.data; } catch (e) { why = String((e && e.message) || e); return null; } };
   let code = CFG.teamCode || lsGet("codigo"), ok = false, msg = "";
-  if (code) { const r = await check(code); ok = r === null ? !!lsGet("codigo") : r; if (!ok) msg = "El código guardado ya no es válido. Escribe el código actual."; }
+  if (code) { const r = await check(code); ok = r === null ? !!lsGet("codigo") : r === true; if (!ok) msg = r === "err" ? "No se pudo verificar: " + why : "El código guardado ya no es válido. Escribe el código actual."; }
   while (!ok) {
     code = await askCode(msg); const r = await check(code);
-    if (r === null) msg = "No se pudo conectar. Revisa tu internet e intenta de nuevo."; else if (!r) msg = "Código incorrecto."; else ok = true;
+    if (r === null) msg = "No se pudo conectar. Revisa tu internet e intenta de nuevo." + (why ? " (" + why + ")" : ""); else if (r === "err") msg = "El servicio respondió con un error: " + why; else if (!r) msg = "Código incorrecto."; else ok = true;
   }
   if (!CFG.teamCode) lsSet("codigo", code);
   const cd = lsGet("dir"); if (cd) setDirectorio(cd);
