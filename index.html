@@ -427,7 +427,7 @@ const FOTOPER = {
   dn: ["San Andreas", "Albion", "Monterey", "Cabrillo", "Alturas", "Portola", "Artesia", "Carpinteria", "Sweet Carolina"]
 };
 const VARIEDADES_BASE = [...FOTOPER.dc, ...FOTOPER.dn];
-const FOTOCATS = ["Apariencia general predio", "Planta sana y vigorosa", "Planta con vigor medio", "Planta débil", "Amarillamiento / clorosis", "Marchitez / estrés hídrico", "Daño de plaga", "Daño de enfermedad", "Daño por helada", "Fallas / mortalidad", "Raíces", "Apariencia flores", "Apariencia fruta", "Problemas detectados", "Reclamo", "Otros"];
+const FOTOCATS = ["Apariencia general predio", "Apariencia planta", "Planta sana y vigorosa", "Planta con vigor medio", "Planta débil", "Amarillamiento / clorosis", "Marchitez / estrés hídrico", "Daño de plaga", "Daño de enfermedad", "Daño por helada", "Fallas / mortalidad", "Raíces", "Apariencia flores", "Apariencia fruta", "Problemas detectados", "Reclamo", "Otros"];
 const nrm = x => String(x || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 function fotoper(name, v) {
   const n = nrm(name);
