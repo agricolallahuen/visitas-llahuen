@@ -66,7 +66,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 
 /* tab bar */
 .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; background: var(--surface); border-top: 1px solid var(--line); padding: 6px max(16px, env(safe-area-inset-left, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
-.tabs-in { max-width: 860px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tabs-in { max-width: 860px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
 .tab { border: 0; background: transparent; padding: 6px 4px; border-radius: 10px; font-weight: 600; font-size: 12.5px; color: var(--muted); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .tab[aria-current="true"] { color: var(--leaf); background: var(--leaf-soft); }
 .tab.new { background: var(--berry); color: #fff; }
@@ -261,6 +261,22 @@ svg text.mlbl { fill: var(--ink); font-family: var(--font-body); } svg text.mlbl
 .copybox { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .copybox > div { background: var(--surface); border-radius: 14px; padding: 16px; width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 10px; }
 .two { display: flex; gap: 8px; flex-wrap: wrap; }
+.copybox input:not([type=checkbox]), .copybox select, .copybox textarea { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; font: inherit; background: var(--surface); color: var(--ink); width: 100%; min-height: 40px; }
+.ag-week { display: flex; align-items: center; gap: 10px; }
+.ag-wl { flex: 1; text-align: center; }
+.ag-jump { display: flex; align-items: center; gap: 8px; }
+.ag-day { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.ag-day > h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.ag-day.hoy > h3 { color: var(--berry); }
+.ag-day h3 .push { margin-left: auto; }
+.ag-card { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--info); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.ag-card.ag-realizada { border-left-color: var(--ok); }
+.ag-card.ag-no_realizada { border-left-color: var(--bad); }
+.ag-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ag-hora { font-weight: 600; color: var(--leaf); }
+.ag-cli { flex: 1; min-width: 120px; }
+.ag-no { background: var(--berry-soft); border-radius: 8px; padding: 8px; }
+.ag-act { margin-top: 6px; }
 .sub-seg { display: flex; gap: 6px; }
 .bgart2 { position: fixed; right: -50px; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); width: min(92vw, 600px); height: auto; z-index: 0; pointer-events: none; fill: none; stroke: var(--leaf); stroke-width: 1.15; stroke-linecap: round; stroke-linejoin: round; opacity: .34; filter: url(#rough-sm); }
 .bgart2 use[href="#i-berry-art"] { stroke: var(--berry); }
@@ -313,6 +329,9 @@ button.chip[aria-pressed="true"] .ft { color: inherit; border-color: currentColo
     </symbol>
     <symbol id="i-camera" viewBox="0 0 64 64">
       <path d="M8 22C8 19 10 17 13 17H21L25 11H39L43 17H51C54 17 56 19 56 22V47C56 50 54 52 51 52H13C10 52 8 50 8 47Z"/><circle cx="32" cy="34" r="10"/>
+    </symbol>
+    <symbol id="i-cal" viewBox="0 0 64 64">
+      <path d="M10 14H54V56H10Z"/><path d="M10 26H54M20 8V20M44 8V20"/><path d="M20 36H26M30 36H36M40 36H46M20 45H26M30 45H36"/>
     </symbol>
     <symbol id="i-note" viewBox="0 0 64 64">
       <path d="M14 8H50V56H14Z"/><path d="M22 20H42M22 29H42M22 38H34"/>
@@ -369,12 +388,14 @@ button.chip[aria-pressed="true"] .ft { color: inherit; border-color: currentColo
   <section class="view" id="v-form" hidden></section>
   <section class="view" id="v-gest" hidden></section>
   <section class="view" id="v-report" hidden></section>
+  <section class="view" id="v-agenda" hidden></section>
 </div>
 
 <nav class="tabs" aria-label="Secciones">
   <div class="tabs-in">
     <button class="tab" data-act="go" data-v="list" id="t-list"><svg class="ico"><use href="#i-book"/></svg>Visitas</button>
     <button class="tab new" data-act="new" id="t-form"><svg class="ico"><use href="#i-berry"/></svg>Nueva</button>
+    <button class="tab" data-act="go" data-v="agenda" id="t-agenda"><svg class="ico"><use href="#i-cal"/></svg>Agenda</button>
     <button class="tab" data-act="go" data-v="gest" id="t-gest"><svg class="ico"><use href="#i-flag"/></svg>Gestión</button>
     <button class="tab" data-act="go" data-v="report" id="t-report"><svg class="ico"><use href="#i-chart"/></svg>Reportes</button>
   </div>
@@ -565,7 +586,8 @@ function recompute() {
   const loc = new Map(), dels = new Set();
   for (const x of S.local) (x.del ? dels.add(x.id) : loc.set(x.id, x));
   const cloud = S.cloud.filter(v => !loc.has(v.id) && !dels.has(v.id));
-  S.visits = [...cloud, ...[...loc.values()].map(x => Object.assign(migrate({ ...x.doc, id: x.id }), { _local: !!S.db }))];
+  const all = [...cloud, ...[...loc.values()].map(x => x.doc.prog ? { ...x.doc, id: x.id, _local: !!S.db } : Object.assign(migrate({ ...x.doc, id: x.id }), { _local: !!S.db }))];
+  S.visits = all.filter(v => !v.prog); S.agenda = all.filter(v => v.prog);
 }
 async function localSave(id, doc) { const item = { id, doc, del: false }; S.local = S.local.filter(x => x.id !== id).concat([item]); await IDB.put("docs", item); }
 async function localDelete(id, tomb) {
@@ -710,9 +732,9 @@ const anchorDL = { async save({ filename, data }) {
 /* ===================== navegación ===================== */
 function show(view) {
   S.view = view;
-  for (const k of ["list", "detail", "form", "gest", "report"]) $("#v-" + k).hidden = k !== view;
+  for (const k of ["list", "detail", "form", "gest", "report", "agenda"]) $("#v-" + k).hidden = k !== view;
   const tabOf = view === "detail" ? "list" : view;
-  for (const k of ["list", "form", "gest", "report"]) $("#t-" + k).setAttribute("aria-current", k === tabOf ? "true" : "false");
+  for (const k of ["list", "form", "gest", "report", "agenda"]) $("#t-" + k).setAttribute("aria-current", k === tabOf ? "true" : "false");
   window.scrollTo(0, 0);
   render();
 }
@@ -721,6 +743,7 @@ function render() {
   else if (S.view === "detail") renderDetail();
   else if (S.view === "gest") renderGest();
   else if (S.view === "report") renderReport();
+  else if (S.view === "agenda") renderAgenda();
 }
 
 /* ===================== lista ===================== */
@@ -2030,6 +2053,138 @@ async function savePptx() {
   finally { if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = "Presentación PowerPoint"; } }
 }
 
+/* ===================== agenda de visitas ===================== */
+const DIAS_ES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"], MES_AB = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const MOTIVOS_AG = ["Seguimiento", "Reclamo", "Nueva variedad", "Pre-plantación", "Entrega de plantas", "Capacitación / presentación", "Otro"];
+const MOTIVOS_NO = ["Productor no disponible", "Lluvia / mal clima", "Problema de transporte", "Cambio de prioridades", "Predio inaccesible", "Otro"];
+const mondayOf = iso => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return isoOf(d); };
+const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return isoOf(d); };
+const dayLbl = iso => { const d = new Date(iso + "T12:00:00"); return `${DIAS_ES[(d.getDay() + 6) % 7]} ${d.getDate()} ${MES_AB[d.getMonth()]}`; };
+const agSorted = list => [...list].sort((a, b) => (a.fecha || "").localeCompare(b.fecha || "") || (a.hora || "99:99").localeCompare(b.hora || "99:99"));
+S.agenda = S.agenda || []; S.ag = S.ag || { week: mondayOf(todayISO()) };
+function agPill(a) {
+  if (a.estado === "realizada") return `<span class="pill" style="--c:var(--ok)">Realizada</span>`;
+  if (a.estado === "no_realizada") return `<span class="pill" style="--c:var(--bad)">No realizada</span>`;
+  return a.fecha < todayISO() ? `<span class="pill" style="--c:var(--warn)">Vencida</span>` : `<span class="pill" style="--c:var(--info)">Pendiente</span>`;
+}
+function agCard(a) {
+  const hasLoc = a.lat != null && a.lng != null, tel = String(a.telefono || "").trim();
+  let act = "";
+  if (a.estado === "realizada") act = `<button class="btn primary" data-ag="registrar" data-id="${a.id}">Registrar la visita</button><button class="btn ghost" data-ag="undo" data-id="${a.id}">Deshacer</button>`;
+  else if (a.estado === "no_realizada") act = (a.reprogFecha ? "" : `<button class="btn" data-ag="reprog" data-id="${a.id}">Reprogramar</button>`) + `<button class="btn ghost" data-ag="undo" data-id="${a.id}">Deshacer</button>`;
+  else act = `<button class="btn primary" data-ag="done" data-id="${a.id}" aria-label="Marcar como realizada">✓ Realizada</button><button class="btn danger" data-ag="notdone" data-id="${a.id}" aria-label="Marcar como no realizada">✕ No realizada</button>`;
+  return `<div class="ag-card ag-${a.estado || "pendiente"}">
+    <div class="ag-top"><span class="ag-hora mono">${esc(a.hora || "--:--")}</span><b class="ag-cli">${esc(a.cliente)}</b>${agPill(a)}</div>
+    <div class="muted small">${esc(a.motivo || "")}${a.detalle ? " · " + esc(a.detalle) : ""}</div>
+    <div class="small">${a.contacto ? esc(a.contacto) : ""}${tel ? ` · <a href="tel:${esc(tel.replace(/[^\d+]/g, ""))}">${esc(tel)}</a>` : ""}</div>
+    <div class="muted small">${[a.ciudad, a.zona ? "Zona " + a.zona : ""].filter(Boolean).map(esc).join(" · ")}</div>
+    ${hasLoc ? `<div class="small">${navLinks(a)}</div>` : ""}
+    ${a.estado === "no_realizada" ? `<div class="ag-no small"><b>Motivo:</b> ${esc(a.motivoNo || "—")}${a.detalleNo ? " · " + esc(a.detalleNo) : ""}<br><b>Reprogramada:</b> ${a.reprogFecha ? esc(dayLbl(a.reprogFecha)) + (a.reprogHora ? " " + esc(a.reprogHora) : "") : "sin fecha todavía"}</div>` : ""}
+    <div class="two ag-act">${act}<button class="btn ghost" data-ag="edit" data-id="${a.id}">Editar</button><button class="btn ghost danger" data-ag="del" data-id="${a.id}">Eliminar</button></div>
+  </div>`;
+}
+function renderAgenda() {
+  const el = $("#v-agenda"), w = S.ag.week, wEnd = addDays(w, 6), hoy = todayISO();
+  const items = agSorted(S.agenda.filter(a => a.fecha >= w && a.fecha <= wEnd)), c = k => items.filter(a => (a.estado || "pendiente") === k).length;
+  const d1 = new Date(w + "T12:00:00"), d2 = new Date(wEnd + "T12:00:00");
+  const lbl = `${d1.getDate()} ${MES_AB[d1.getMonth()]} - ${d2.getDate()} ${MES_AB[d2.getMonth()]} ${d2.getFullYear()}`;
+  let days = "";
+  for (let i = 0; i < 7; i++) {
+    const iso = addDays(w, i), L = items.filter(a => a.fecha === iso);
+    days += `<section class="ag-day${iso === hoy ? " hoy" : ""}"><h3>${dayLbl(iso)}${iso === hoy ? ' <span class="pill" style="--c:var(--berry)">Hoy</span>' : ""}<button class="lnk push" data-ag="new" data-date="${iso}">+ Programar</button></h3>${L.length ? L.map(agCard).join("") : `<p class="muted small">Sin visitas programadas.</p>`}</section>`;
+  }
+  el.innerHTML = `<div class="h-row"><h2>Agenda de visitas</h2><button class="btn primary" data-ag="new">+ Programar visita</button></div>
+  <div class="ag-week"><button class="btn" data-ag="prev" aria-label="Semana anterior">‹</button><div class="ag-wl"><b>Semana ${lbl}</b><div class="muted small">${items.length} programada${items.length === 1 ? "" : "s"} · ${c("realizada")} realizada${c("realizada") === 1 ? "" : "s"} · ${c("no_realizada")} no realizada${c("no_realizada") === 1 ? "" : "s"} · ${items.length - c("realizada") - c("no_realizada")} pendiente${items.length - c("realizada") - c("no_realizada") === 1 ? "" : "s"}</div></div><button class="btn" data-ag="next" aria-label="Semana siguiente">›</button></div>
+  <div class="two"><button class="btn ghost" data-ag="today">Esta semana</button><label class="ag-jump muted small">Ir a la semana de <input type="date" data-ag="jump" value="${w}"></label></div>
+  ${days}`;
+}
+function agFromClient(name) {
+  const out = {}, r = dirRow(name);
+  if (r) { out.zona = DIRECTORIO.zonas[r[0]]; out.ciudad = tcase(r[2] || ""); }
+  const last = S.visits.filter(v => norm(v.cliente) === norm(name)).sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))[0];
+  if (last) { if (last.contacto) out.contacto = last.contacto; if (!last.coordAprox && last.lat != null) out.coords = `${last.lat}, ${last.lng}`; if (!out.ciudad && last.comuna) out.ciudad = last.comuna; if (!out.zona) out.zona = zonaV(last); }
+  return out;
+}
+function agModal(a) {
+  a = a || {}; const ed = !!a.id, fecha = a.fecha || (S.ag.date || todayISO());
+  const el = document.createElement("div"); el.className = "copybox"; el.id = "ag-modal";
+  const opt = (L, cur) => L.map(x => `<option ${x === cur ? "selected" : ""}>${esc(x)}</option>`).join("");
+  el.innerHTML = `<div style="max-height:92vh;overflow:auto"><h3>${ed ? "Editar visita programada" : "Programar visita"}</h3>
+    <div class="field"><label for="ag-cli">Cliente</label><input id="ag-cli" list="dl-clientes" value="${esc(a.cliente || "")}" autocomplete="off"></div>
+    <div class="field"><label for="ag-con">Nombre del contacto</label><input id="ag-con" value="${esc(a.contacto || "")}"></div>
+    <div class="field"><label for="ag-tel">Teléfono</label><input id="ag-tel" type="tel" inputmode="tel" value="${esc(a.telefono || "")}" placeholder="+56 9 1234 5678"></div>
+    <div class="two"><div class="field" style="flex:1;min-width:140px"><label for="ag-zona">Zona</label><select id="ag-zona"><option value="">Seleccionar…</option>${opt(ZONAS, a.zona)}</select></div>
+    <div class="field" style="flex:1;min-width:140px"><label for="ag-ciudad">Ciudad / comuna</label><input id="ag-ciudad" value="${esc(a.ciudad || "")}"></div></div>
+    <div class="two"><div class="field" style="flex:1;min-width:140px"><label for="ag-fecha">Fecha (calendario)</label><input id="ag-fecha" type="date" value="${fecha}"></div>
+    <div class="field" style="flex:1;min-width:120px"><label for="ag-hora">Hora programada</label><input id="ag-hora" type="time" value="${esc(a.hora || "")}"></div></div>
+    <div class="muted small" id="ag-dow"></div><div class="chips" id="ag-chips"></div>
+    <div class="field"><label for="ag-mot">Motivo</label><select id="ag-mot">${opt(MOTIVOS_AG, a.motivo)}</select></div>
+    <div class="field"><label for="ag-det">Detalle del motivo (opcional)</label><input id="ag-det" value="${esc(a.detalle || "")}"></div>
+    <div class="field"><label for="ag-co">Ubicación: pegar coordenadas (latitud, longitud)</label><input id="ag-co" value="${a.lat != null ? esc(a.lat + ", " + a.lng) : ""}" placeholder="-36.82700, -73.05000" autocomplete="off"><div class="muted small" id="ag-cohint"></div></div>
+    <div class="two"><button class="btn primary" data-ag="save" data-id="${a.id || ""}">Guardar</button><button class="btn ghost" data-ag="close">Cancelar</button></div></div>`;
+  document.body.appendChild(el);
+  const dow = () => { const f = $("#ag-fecha").value; $("#ag-dow").textContent = f ? "Día: " + dayLbl(f) : "";
+    const m = f ? mondayOf(f) : mondayOf(todayISO()); $("#ag-chips").innerHTML = [0, 1, 2, 3, 4, 5, 6].map(i => { const d = addDays(m, i); return `<button type="button" class="chip" data-ag="pickday" data-d="${d}" aria-pressed="${d === f}">${DIAS_ES[i].slice(0, 3)} ${d.slice(8)}</button>`; }).join(""); };
+  const coh = () => { const t = $("#ag-co").value.trim(), h = $("#ag-cohint"); if (!t) { h.textContent = ""; return; } const p = parseCoords(t); h.textContent = p ? `Ubicación reconocida (${nearestRegion(p.lat).n}).` : "No se reconoce. Usa el formato -36.827, -73.050 (dentro de Chile)."; };
+  $("#ag-fecha").addEventListener("input", dow); $("#ag-co").addEventListener("input", coh); dow(); coh();
+  $("#ag-cli").addEventListener("change", () => { const o = agFromClient($("#ag-cli").value.trim()); const set = (id, v) => { const e = $(id); if (e && !e.value && v) e.value = v; }; set("#ag-con", o.contacto); set("#ag-ciudad", o.ciudad); set("#ag-zona", o.zona); set("#ag-co", o.coords); coh(); });
+  return el;
+}
+async function agSave(id) {
+  const g = x => $(x).value.trim(), cli = g("#ag-cli"), fecha = $("#ag-fecha").value;
+  if (!cli) { toast("Indica el cliente."); return; } if (!fecha) { toast("Elige la fecha."); return; }
+  const co = g("#ag-co"), p = co ? parseCoords(co) : null; if (co && !p) { toast("Las coordenadas no se reconocen."); return; }
+  const base = id ? S.agenda.find(x => x.id === id) : null;
+  const doc = { ...(base ? stripAg(base) : { estado: "pendiente", creado: Date.now() }), prog: true, cliente: cli, contacto: g("#ag-con"), telefono: g("#ag-tel"), zona: $("#ag-zona").value, ciudad: g("#ag-ciudad"), fecha, hora: $("#ag-hora").value, motivo: $("#ag-mot").value, detalle: g("#ag-det"), lat: p ? p.lat : null, lng: p ? p.lng : null, fotos: [], actualizado: Date.now() };
+  try { await saveDoc(id || null, doc, []); } catch (e) { toast("No se pudo guardar la visita programada."); return; }
+  const m = $("#ag-modal"); if (m) m.remove(); S.ag.week = mondayOf(fecha); recompute(); renderAgenda(); toast("Visita programada guardada");
+}
+const stripAg = a => { const { id, _local, ...r } = a; return r; };
+function agNoModal(a) {
+  const el = document.createElement("div"); el.className = "copybox"; el.id = "ag-modal";
+  el.innerHTML = `<div style="max-height:92vh;overflow:auto"><h3>Visita no realizada</h3><p class="muted small">${esc(a.cliente)} · ${esc(dayLbl(a.fecha))} ${esc(a.hora || "")}</p>
+    <div class="field"><label for="ag-mno">Motivo de la no realización</label><select id="ag-mno">${MOTIVOS_NO.map(x => `<option>${esc(x)}</option>`).join("")}</select></div>
+    <div class="field"><label for="ag-dno">Detalle (opcional)</label><textarea id="ag-dno" rows="2"></textarea></div>
+    <div class="two"><div class="field" style="flex:1;min-width:140px"><label for="ag-rf">Se reprograma para (fecha)</label><input id="ag-rf" type="date" value="${a.reprogFecha || ""}"></div><div class="field" style="flex:1;min-width:120px"><label for="ag-rh">Hora</label><input id="ag-rh" type="time" value="${esc(a.hora || "")}"></div></div>
+    <p class="muted small">Si eliges una fecha, se crea una nueva visita programada ese día. Puedes dejarla vacía y reprogramar después.</p>
+    <div class="two"><button class="btn primary" data-ag="savenot" data-id="${a.id}">Guardar</button><button class="btn ghost" data-ag="close">Cancelar</button></div></div>`;
+  document.body.appendChild(el); return el;
+}
+async function agSetEstado(a, patch) { await persist(a, patch); }
+async function agNewFrom(a, fecha, hora) {
+  const { estado, motivoNo, detalleNo, reprogFecha, reprogHora, reprogId, realizadaEn, ...r } = stripAg(a);
+  const doc = { ...r, estado: "pendiente", fecha, hora: hora || a.hora || "", origen: a.id, creado: Date.now(), actualizado: Date.now(), prog: true, fotos: [] };
+  return saveDoc(null, doc, []);
+}
+document.addEventListener("click", async ev => {
+  const t = ev.target.closest && ev.target.closest("[data-ag]"); if (!t) return;
+  const k = t.dataset.ag, id = t.dataset.id, a = id ? S.agenda.find(x => x.id === id) : null;
+  if (k === "new") { S.ag.date = t.dataset.date || ""; agModal({ fecha: t.dataset.date }); }
+  else if (k === "close") { const m = $("#ag-modal"); if (m) m.remove(); }
+  else if (k === "prev") { S.ag.week = addDays(S.ag.week, -7); renderAgenda(); }
+  else if (k === "next") { S.ag.week = addDays(S.ag.week, 7); renderAgenda(); }
+  else if (k === "today") { S.ag.week = mondayOf(todayISO()); renderAgenda(); }
+  else if (k === "pickday") { $("#ag-fecha").value = t.dataset.d; $("#ag-fecha").dispatchEvent(new Event("input")); }
+  else if (k === "save") agSave(id || null);
+  else if (a && k === "edit") agModal(a);
+  else if (a && k === "done") { await agSetEstado(a, { estado: "realizada", realizadaEn: Date.now() }); renderAgenda(); toast("Visita marcada como realizada"); }
+  else if (a && (k === "notdone" || k === "reprog")) agNoModal(a);
+  else if (a && k === "undo") { await agSetEstado(a, { estado: "pendiente", motivoNo: "", detalleNo: "", reprogFecha: "", reprogHora: "" }); renderAgenda(); }
+  else if (a && k === "savenot") {
+    const rf = $("#ag-rf").value, rh = $("#ag-rh").value; let rid = a.reprogId || "";
+    if (rf && !a.reprogFecha) { try { const r = await agNewFrom(a, rf, rh); rid = r.id; } catch (e) { toast("No se pudo crear la visita reprogramada."); return; } }
+    await agSetEstado(a, { estado: "no_realizada", motivoNo: $("#ag-mno").value, detalleNo: $("#ag-dno").value.trim(), reprogFecha: rf || a.reprogFecha || "", reprogHora: rh, reprogId: rid });
+    const m = $("#ag-modal"); if (m) m.remove(); renderAgenda(); toast(rf ? "Reprogramada para " + dayLbl(rf) : "Marcada como no realizada");
+  }
+  else if (a && k === "del") { if (t.dataset.armed) { try { await deleteVisit(a); } catch (e) { } renderAgenda(); } else { t.dataset.armed = "1"; t.textContent = "¿Seguro? Toca otra vez"; setTimeout(() => { if (t.isConnected) { delete t.dataset.armed; t.textContent = "Eliminar"; } }, 3500); } }
+  else if (a && k === "registrar") {
+    const reg = a.lat != null ? nearestRegion(a.lat).n : "", base = { cliente: a.cliente, contacto: a.contacto || "", comuna: a.ciudad || "", region: reg, fecha: a.fecha <= todayISO() ? a.fecha : todayISO() };
+    if (a.lat != null) Object.assign(base, { lat: a.lat, lng: a.lng, coordAprox: false, coordFuente: "manual" });
+    if (TIPOS_VISITA.includes(a.motivo)) base.tipo = a.motivo; base.estrategico = isEstr(a.cliente); openForm(base);
+  }
+});
+document.addEventListener("change", ev => { const t = ev.target; if (t.dataset && t.dataset.ag === "jump" && t.value) { S.ag.week = mondayOf(t.value); renderAgenda(); } });
+
 /* ===================== ejemplos ===================== */
 async function loadExamples() {
   const E = o => Object.assign({ ejemplo: true, coordAprox: false, estrategico: false, destacados: [], fotos: [], contacto: "", plantacion: "", proxima: "", recomendaciones: "", notas: "", manejo: "", fito: "Sano", fitoDetalle: "", evalVar: {}, creado: Date.now(), actualizado: Date.now() }, o, { zona: zonaV(o) });
@@ -2365,7 +2520,7 @@ async function init() {
   if (S.db) {
     setSync("on", TEAM ? "datos del equipo" : "guardado en la nube");
     S.db.collection("visitas").onSnapshot(snap => {
-      S.cloud = snap.docs.map(d => migrate({ id: d.id, ...d.data() })); S.loaded = true;
+      S.cloud = snap.docs.map(d => { const x = { id: d.id, ...d.data() }; return x.prog ? x : migrate(x); }); S.loaded = true;
       recompute(); rebuildClientList(); updateSync();
       if (S.view !== "form") render();
     }, err => { S.loaded = true; recompute(); setSync("off", "sin acceso a los datos"); render(); });
