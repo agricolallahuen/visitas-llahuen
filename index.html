@@ -162,6 +162,9 @@ button.chip[aria-pressed="true"] { background: var(--leaf); border-color: var(--
 .notes { white-space: pre-wrap; margin: 0; }
 
 /* reports */
+.vsel-list { max-height: 52vh; overflow: auto; margin: 10px 0; border: 1px solid var(--line, #d2dbd1); border-radius: 10px }
+.vsel-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-bottom: 1px solid var(--line, #d2dbd1); cursor: pointer }
+.vsel-row input { width: 22px; height: 22px; flex: none; margin-top: 2px }
 .rtabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .rtabs .chip { flex: none; }
 .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
@@ -580,7 +583,7 @@ const isLoc = id => String(id).startsWith("loc-");
 const cloudOK = () => !!S.db && navigator.onLine !== false;
 async function loadLocal() {
   S.local = await IDB.all("docs");
-  for (const b of await IDB.all("blobs")) if (!LOCALURL[b.id]) LOCALURL[b.id] = URL.createObjectURL(b.blob);
+  for (const b of await IDB.all("blobs")) if (b.blob && !LOCALURL[b.id]) LOCALURL[b.id] = URL.createObjectURL(b.blob);
 }
 function recompute() {
   const loc = new Map(), dels = new Set();
@@ -1002,12 +1005,12 @@ function renderDest() {
 function renderPhotos() {
   const F = S.form, g = $("#photogrid");
   const catSel = (kind, i, cur) => `<select data-fc="${kind}" data-i="${i}" aria-label="Clasificación de la foto"><option value="">Sin clasificar</option>${FOTOCATS.map(c => `<option ${c === cur ? "selected" : ""}>${c}</option>`).join("")}</select>`;
-  const varSel = (kind, i, cur) => { const L = allVarieties().slice().sort((a, b) => a.localeCompare(b, "es")); if (cur && !L.includes(cur)) L.push(cur); return `<select data-fv="${kind}" data-i="${i}" aria-label="Variedad de la foto"><option value="">Variedad (lista)…</option>${L.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`; };
+  const varSel = (kind, i, cur) => { const L = [...F.variedades]; if (cur && !L.includes(cur)) L.push(cur); return `<select data-fv="${kind}" data-i="${i}" aria-label="Variedad de la foto"><option value="">Variedad del predio…</option>${L.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`; };
   const old = F.fotos.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto guardada" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"><button type="button" data-act="rmfoto" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("old", i, f.cat)}${varSel("old", i, f.variedad)}</div>`).join("");
   const nu = F.nuevas.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto nueva" src="${f.url}"><button type="button" data-act="rmnueva" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("new", i, f.cat)}${varSel("new", i, f.variedad)}</div>`).join("");
   const canUp = !!S.assets || !S.db;
   g.innerHTML = old + nu + (canUp ? `<label class="addph" id="cam-label">Tomar foto<input type="file" accept="image/*" capture="environment" id="f-cam"></label><label class="addph">Elegir de galería<input type="file" accept="image/*" multiple id="f-fotos"></label>` : "");
-  $("#photohint").textContent = canUp ? "Clasifica cada foto (apariencia de la planta, raíces, flores, fruta, problemas, etc.) y elige su variedad para ordenarlas en los reportes. “Tomar foto” abre la cámara y “Elegir de galería” abre tu galería. Las fotos no guardan ubicación GPS; la ubicación del predio se fija con el botón GPS." : "Solo quienes pueden editar este artefacto suben fotos. Inicia sesión como propietario para agregarlas.";
+  $("#photohint").textContent = canUp ? "Clasifica cada foto (apariencia de la planta, raíces, flores, fruta, problemas, etc.) y elige su variedad entre las marcadas en esta visita para ordenarlas en los reportes. “Tomar foto” abre la cámara y “Elegir de galería” abre tu galería. Las fotos no guardan ubicación GPS; la ubicación del predio se fija con el botón GPS." : "Solo quienes pueden editar este artefacto suben fotos. Inicia sesión como propietario para agregarlas.";
 }
 function parseCoords(txt) {
   const m = String(txt || "").replace(/[−–]/g, "-").match(/-?\d+(?:[.,]\d+)?/g);
@@ -1120,19 +1123,32 @@ function readExif(buf) {
   return {};
 }
 async function compress(file) {
-  const bmp = await createImageBitmap(file);
-  const k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
-  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
-  return await new Promise(r => c.toBlob(r, "image/jpeg", 0.74));
+  const MAX = 1280; let bmp = null, c = null, img = null, url = "";
+  try {
+    let w, h, src;
+    try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch (e) { try { bmp = await createImageBitmap(file); } catch (e2) { bmp = null; } }
+    if (bmp) { w = bmp.width; h = bmp.height; src = bmp; }
+    else { url = URL.createObjectURL(file); img = new Image(); img.decoding = "async"; img.src = url; await img.decode(); w = img.naturalWidth; h = img.naturalHeight; src = img; }
+    const k = Math.min(1, MAX / Math.max(w, h));
+    c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+    c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.72));
+    if (!blob) throw new Error("sin imagen");
+    return blob;
+  } finally { if (bmp && bmp.close) bmp.close(); if (c) { c.width = 1; c.height = 1; } if (url) URL.revokeObjectURL(url); img = null; }
 }
+let _addBusy = false;
 async function addPhotos(files) {
-  const F = S.form;
-  for (const file of files) {
-    try { const blob = await compress(file); F.nuevas.push({ blob, url: URL.createObjectURL(blob), cat: "", variedad: "" }); }
-    catch (e) { toast("No se pudo leer una de las fotos (¿formato HEIC?). Usa JPG o PNG."); }
+  const F = S.form; if (!F) return;
+  const q = [...files]; let bad = 0;
+  for (let i = 0; i < q.length; i++) {
+    if (S.form !== F) return;
+    if (q.length > 1) toast(`Procesando foto ${i + 1} de ${q.length}…`);
+    try { const blob = await compress(q[i]); F.nuevas.push({ blob, url: URL.createObjectURL(blob), cat: "", variedad: "" }); renderPhotos(); await saveDraftNow(); }
+    catch (e) { bad++; }
+    await new Promise(r => setTimeout(r, 60));
   }
-  renderPhotos();
+  if (bad) toast(bad + " foto(s) no se pudieron leer (¿formato HEIC?). Usa JPG o PNG.");
 }
 /* ===== listado de productores ===== */
 const tcase = x => String(x || "").toLowerCase().replace(/(^|\s)\S/g, m => m.toUpperCase()).replace(/\b(De|Del|La|Las|Los|Y)\b/g, m => m.toLowerCase());
@@ -1202,7 +1218,7 @@ async function saveForm() {
     const res = await saveDoc(F.id, doc, (S.assets || !S.db) ? F.nuevas : []);
     const id = res.id;
     F.nuevas.forEach(n => URL.revokeObjectURL(n.url));
-    S.form = null; S.detailId = id; toast(res.mode === "local" && S.db ? "Guardada sin conexión. Se sincroniza sola al volver la señal." : "Visita guardada"); show("detail");
+    await clearDraft(); S.form = null; S.detailId = id; toast(res.mode === "local" && S.db ? "Guardada sin conexión. Se sincroniza sola al volver la señal." : "Visita guardada"); show("detail");
   } catch (e) {
     btn.disabled = false; btn.textContent = "Guardar visita";
     toast(e && e.code === "invalid_argument" ? "Tu acceso es de solo lectura: no puedes guardar visitas." : "No se pudo guardar: " + (e && e.message || "error desconocido"));
@@ -1290,11 +1306,11 @@ function sumFlags(vs) {
 
 function renderReport() {
   const el = $("#v-report"), vs = repVisits(), cs = clientsOf(vs), fl = sumFlags(vs);
-  const tabs = [["zona", "Zona y región"], ["cliente", "Clientes"], ["variedad", "Variedades"], ["adopcion", "Adopción"], ["destacados", "Destacados"], ["graficos", "Gráficos"], ["mapa", "Mapa"], ["informe", "Informe Gerencia"]];
+  const tabs = [["zona", "Zona y región"], ["cliente", "Clientes"], ["variedad", "Variedades"], ["adopcion", "Adopción"], ["destacados", "Destacados"], ["graficos", "Gráficos"], ["mapa", "Mapa"], ["informe", "Informe Gerencia"], ["pdfvis", "PDF por visita"]];
   let body = "";
   if (!S.visits.length) body = `<div class="empty">${ico("chart", "berry")}<p class="muted">Los reportes aparecen cuando registres visitas.</p><button class="btn primary" data-act="new">Registrar visita</button></div>`;
   else if (!vs.length) body = `<p class="muted">No hay visitas en ese periodo.</p>`;
-  else body = { zona: repZona, cliente: repCliente, variedad: repVariedad, adopcion: repAdopcion, destacados: repDest, graficos: repGraficos, mapa: repMapa, informe: repInforme }[S.rep.tab](vs, cs);
+  else body = { zona: repZona, cliente: repCliente, variedad: repVariedad, adopcion: repAdopcion, destacados: repDest, graficos: repGraficos, mapa: repMapa, informe: repInforme, pdfvis: repPdfVis }[S.rep.tab](vs, cs);
   el.innerHTML = `
     <div class="h-row"><h2>Reportes</h2>
       <div class="two"><button class="btn" data-act="csvtabla">Exportar esta tabla</button><button class="btn" data-act="csvall">Exportar visitas</button></div></div>
@@ -2185,6 +2201,123 @@ document.addEventListener("click", async ev => {
 });
 document.addEventListener("change", ev => { const t = ev.target; if (t.dataset && t.dataset.ag === "jump" && t.value) { S.ag.week = mondayOf(t.value); renderAgenda(); } });
 
+/* ===================== PDF por visita (una o varias, con fotos, sin gráficos) ===================== */
+async function saveVisitsPdf(ids) {
+  const vs = (ids || []).map(byId).filter(Boolean).sort((a, b) => (a.fecha || "").localeCompare(b.fecha || "") || String(a.cliente).localeCompare(String(b.cliente), "es"));
+  if (!vs.length) { toast("Elige al menos una visita."); return; }
+  if (!S.dl) { toast("La descarga no está disponible en esta vista."); return; }
+  const btn = document.querySelector('[data-act="vpdf"]'), txt0 = btn && btn.textContent; if (btn) btn.disabled = true;
+  const prog = t => { if (btn && btn.isConnected) btn.textContent = t; };
+  try {
+    prog("Cargando…");
+    if (!(await ensureLib(() => !!window.jspdf, LIB_PDF))) { toast("No se pudo cargar el generador de PDF. Se necesita internet la primera vez."); return; }
+    const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: "mm", format: "letter" });
+    const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 18, TW = W - 2 * M;
+    const clean = t => String(t ?? "").replace(/[—–]/g, "-").replace(/…/g, "...").replace(/[“”]/g, '"').replace(/★/g, "*").replace(/[^\u0000-ÿ]/g, "");
+    const GREEN = [42, 104, 70], BERRY = [177, 36, 59], INK = [23, 37, 29], MUTED = [91, 106, 96];
+    let y = M; const need = h => { if (y + h > H - 18) { doc.addPage(); y = M; } };
+    const head = t => { need(14); y += 2; doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); doc.setTextColor(...GREEN); doc.text(clean(t), M, y); doc.setDrawColor(210, 219, 209); doc.setLineWidth(0.3); doc.line(M, y + 1.7, W - M, y + 1.7); y += 6.5; };
+    const para = (t, o = {}) => { doc.setFont("helvetica", o.bold ? "bold" : "normal"); doc.setFontSize(o.sz || 9.5); doc.setTextColor(...(o.c || INK)); const ls = doc.splitTextToSize(clean(t), TW - (o.ind || 0)); for (const l of ls) { need(5); doc.text(l, M + (o.ind || 0), y); y += 4.6; } };
+    const kv = (k, x) => { if (x === "" || x == null) return; need(5); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...MUTED); doc.text(clean(k), M, y); doc.setFont("helvetica", "normal"); doc.setTextColor(...INK); const ls = doc.splitTextToSize(clean(x), TW - 42); ls.forEach((l, i) => { if (i) need(4.6); doc.text(l, M + 42, y); y += 4.6; }); };
+    const logo = (() => { try { return document.getElementById("logo").src; } catch (e) { return ""; } })();
+    const titleBlock = (t1, t2, t3) => {
+      try { if (logo) doc.addImage(logo, "PNG", M, 11, 24, 16.4); } catch (e) { }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...INK); doc.text(clean(t1), M + 30, 19);
+      doc.setFontSize(11); doc.setTextColor(...BERRY); doc.text(clean(t2), M + 30, 25.5);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...MUTED); doc.text(clean(t3), M + 30, 31);
+      doc.text("Emitido el " + clean(fmtD(todayISO())), W - M, 31, { align: "right" });
+      doc.setDrawColor(...GREEN); doc.setLineWidth(0.5); doc.line(M, 35, W - M, 35); y = 42;
+    };
+    const cnt = (v, t) => (v.destacados || []).filter(d => d.tipo === t).length;
+    if (vs.length > 1) {
+      titleBlock("Informe de visitas", `${vs.length} visitas seleccionadas`, `${fmtD(vs[0].fecha)} al ${fmtD(vs[vs.length - 1].fecha)}`);
+      const rc = vs.reduce((s, v) => s + cnt(v, "Reclamo"), 0), op = vs.reduce((s, v) => s + cnt(v, "Oportunidad"), 0), fo = vs.reduce((s, v) => s + (v.fotos || []).length, 0);
+      head("Resumen general");
+      kv("Visitas", String(vs.length)); kv("Clientes", String(uniq(vs.map(v => v.cliente)).length)); kv("Reclamos", String(rc)); kv("Oportunidades", String(op)); kv("Fotografías", String(fo));
+      head("Visitas incluidas");
+      vs.forEach((v, i) => { para(`${i + 1}. ${fmtD(v.fecha)} - ${v.cliente}${v.predio ? " (" + v.predio + ")" : ""}`, { bold: true });
+        para([v.tipo, v.region, v.estado ? "estado " + v.estado : "", cnt(v, "Reclamo") ? cnt(v, "Reclamo") + " reclamo(s)" : "", cnt(v, "Oportunidad") ? cnt(v, "Oportunidad") + " oportunidad(es)" : "", (v.fotos || []).length ? (v.fotos || []).length + " foto(s)" : ""].filter(Boolean).join(" - "), { ind: 5, c: MUTED, sz: 8.5 }); });
+    }
+    for (let vi = 0; vi < vs.length; vi++) {
+      const v = vs[vi]; prog(`Visita ${vi + 1} de ${vs.length}…`);
+      if (vi > 0 || vs.length > 1) doc.addPage();
+      titleBlock("Informe de visita", v.cliente, `${fmtD(v.fecha)} - ${v.tipo || "Visita"}${v.predio ? " - " + v.predio : ""}`);
+      head("Descripción del predio");
+      kv("Cliente", v.cliente + (isEstr(v.cliente) ? " (estratégico)" : "")); kv("Predio", v.predio); kv("Contacto", v.contacto);
+      kv("Zona / región", [zonaV(v), v.region].filter(Boolean).join(" / ")); kv("Comuna", v.comuna);
+      if (v.lat != null) kv("Ubicación", `${Number(v.lat).toFixed(5)}, ${Number(v.lng).toFixed(5)}${v.coordAprox ? " (referencia de la región)" : v.prec ? ` (precisión +/- ${v.prec} m)` : ""}`);
+      kv("Superficie", v.superficie ? nfmt(v.superficie) + " ha" : ""); kv("Fecha de plantación", v.plantacion ? fmtD(v.plantacion) : "");
+      kv("Etapa del cultivo", (v.etapas && v.etapas.length ? v.etapas.join(" + ") : v.etapa)); kv("Estado general", v.estado); kv("Próxima visita", v.proxima ? fmtD(v.proxima) : "");
+      const vars = v.variedades || [];
+      if (vars.length) {
+        head("Variedades evaluadas");
+        for (const n of vars) { const e = (v.evalVar || {})[n] || {}; const meta = [e.anios && e.anios.length ? e.anios.join(" y ") + " año" : "", e.ha ? nfmt(e.ha) + " ha" : "", e.estado, e.nueva ? "variedad nueva" : "", e.adopcion].filter(Boolean).join(" - ");
+          para(n + (meta ? "  (" + meta + ")" : ""), { bold: true }); if (e.resultado) para(e.resultado, { ind: 4, c: MUTED }); }
+      }
+      const agro = v.manejo || v.notas || v.fito || v.fitoDetalle;
+      if (agro) { head("Notas agronómicas");
+        if (v.fito || v.fitoDetalle) para("Sanidad: " + [v.fito, v.fitoDetalle].filter(Boolean).join(" - "));
+        if (v.manejo) para("Manejo observado: " + v.manejo);
+        if (v.notas) para(v.notas); }
+      const dest = v.destacados || [], line = d => { const extra = [d.categoria || d.sub, d.estado, d.variedad, d.tipo === "Reclamo" && d.repo ? "reposición " + repoTxt(d) : "", d.ventas ? "con ventas" : ""].filter(Boolean).join(" - ");
+        para(extra ? "(" + extra + ")" : "", { bold: true, c: MUTED, sz: 8.5 }); para(d.texto || "", { ind: 4 }); if (d.resolucion) para("Resolución: " + d.resolucion, { ind: 4, c: MUTED }); };
+      const rcs = dest.filter(d => d.tipo === "Reclamo"), ops = dest.filter(d => d.tipo === "Oportunidad"), otros = dest.filter(d => d.tipo !== "Reclamo" && d.tipo !== "Oportunidad");
+      if (rcs.length) { head("Reclamos"); rcs.forEach(line); }
+      if (ops.length) { head("Oportunidades comerciales"); ops.forEach(line); }
+      if (otros.length) { head("Otros puntos destacados"); otros.forEach(d => { para(d.tipo, { bold: true, c: d.tipo === "Riesgo" ? BERRY : GREEN }); para(d.texto || "", { ind: 4 }); }); }
+      if (v.recomendaciones) { head("Recomendaciones"); para(v.recomendaciones); }
+      const fotos = v.fotos || [];
+      if (fotos.length) {
+        doc.addPage(); y = M; head(`Fotografías - ${v.cliente} (${fotos.length})`);
+        const cw = (TW - 6) / 2, ch = 78; let col = 0, rowY = y, rowH = 0;
+        for (let i = 0; i < fotos.length; i++) {
+          const f = fotos[i]; let img = null; try { img = await photoData(f.id); } catch (e) { }
+          const cap = clean([f.cat || "Sin clasificar", f.variedad ? "Variedad: " + f.variedad : ""].filter(Boolean).join(" - "));
+          if (col === 0) { if (rowY + ch + 12 > H - 18) { doc.addPage(); rowY = M; } }
+          const x0 = M + col * (cw + 6);
+          if (img) { const k = Math.min(cw / img.w, ch / img.h), w = img.w * k, h = img.h * k; doc.addImage(img.data, "JPEG", x0 + (cw - w) / 2, rowY + (ch - h) / 2, w, h); }
+          else { doc.setDrawColor(210, 219, 209); doc.rect(x0, rowY, cw, ch); doc.setFontSize(9); doc.setTextColor(...MUTED); doc.text("Foto no disponible", x0 + cw / 2, rowY + ch / 2, { align: "center" }); }
+          doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...INK); const cl = doc.splitTextToSize(`${i + 1}. ${cap}`, cw); doc.text(cl, x0, rowY + ch + 4.5);
+          rowH = Math.max(rowH, ch + 4.5 + cl.length * 4);
+          if (col === 1 || i === fotos.length - 1) { rowY += rowH + 5; col = 0; rowH = 0; } else col = 1;
+        }
+      }
+    }
+    const n = doc.getNumberOfPages();
+    for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...MUTED); doc.setDrawColor(210, 219, 209); doc.setLineWidth(0.3); doc.line(M, H - 14, W - M, H - 14); doc.text("Agrícola Llahuen - Informe de visita", M, H - 9); doc.text("Página " + i + " de " + n, W - M, H - 9, { align: "right" }); }
+    const slug = vs.length === 1 ? norm(vs[0].cliente).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) + "-" + vs[0].fecha : vs.length + "-visitas-" + todayISO();
+    await S.dl.save({ filename: `visita-${slug}.pdf`, data: doc.output("blob") }); toast("PDF listo");
+  } catch (e) { if (!e || e.code !== "declined") toast("No se pudo generar el PDF: " + ((e && e.message) || "error")); }
+  finally { if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = txt0; } }
+}
+function repPdfVis(vs) {
+  const list = [...vs].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || String(a.cliente).localeCompare(String(b.cliente), "es"));
+  S.vsel = (S.vsel || []).filter(id => S.visits.some(v => v.id === id));
+  const rows = list.map(v => `<label class="vsel-row"><input type="checkbox" data-act="vsel" data-id="${v.id}" ${S.vsel.includes(v.id) ? "checked" : ""}><span><b>${esc(v.cliente)}</b><br><span class="muted small">${esc(fmtD(v.fecha))} · ${esc(v.tipo || "")}${v.predio ? " · " + esc(v.predio) : ""}${(v.fotos || []).length ? " · " + v.fotos.length + " foto(s)" : ""}</span></span></label>`).join("");
+  return `<div class="panel"><h3>PDF por visita</h3><p class="muted small">Marca una o más visitas del periodo. El PDF resume por visita: descripción del predio, notas agronómicas, reclamos, oportunidades, recomendaciones y fotografías con su descripción. Sin gráficos.</p>
+  <div class="two"><button class="btn" data-act="vselall">Marcar todas</button><button class="btn ghost" data-act="vselnone">Limpiar</button></div>
+  <div class="vsel-list">${rows}</div>
+  <button class="btn primary" data-act="vpdf" id="vpdf-btn">${S.vsel.length ? `Generar PDF (${S.vsel.length})` : "Generar PDF"}</button></div>`;
+}
+function vselUpd() { const b = $("#vpdf-btn"); if (b && !b.disabled) b.textContent = S.vsel.length ? `Generar PDF (${S.vsel.length})` : "Generar PDF"; }
+/* ===== borrador de la visita en curso (sobrevive a un cierre de la app) ===== */
+let _dT = 0;
+async function saveDraftNow() {
+  const F = S.form; if (!F || !IDB.db) return;
+  try { if ($("#f-cliente")) collectForm(); } catch (e) { }
+  try { const { nuevas, ...rest } = F; await IDB.put("blobs", { id: "draft-form", form: JSON.parse(JSON.stringify(rest)), nuevas: (nuevas || []).map(n => ({ blob: n.blob, cat: n.cat || "", variedad: n.variedad || "" })), t: Date.now() }); } catch (e) { }
+}
+function saveDraft() { clearTimeout(_dT); _dT = setTimeout(saveDraftNow, 700); }
+async function clearDraft() { clearTimeout(_dT); try { await IDB.del("blobs", "draft-form"); } catch (e) { } }
+async function restoreDraft() {
+  if (S.form || !IDB.db) return;
+  let d = null; try { d = await IDB.get("blobs", "draft-form"); } catch (e) { }
+  if (!d || !d.form || !canEdit()) return;
+  const f = d.form; if (!f.cliente && !(d.nuevas || []).length && !f.notas) { clearDraft(); return; }
+  S.form = blankForm({ ...f, nuevas: (d.nuevas || []).map(n => ({ blob: n.blob, url: URL.createObjectURL(n.blob), cat: n.cat, variedad: n.variedad })) });
+  show("form"); renderForm(); renderEtapas(); toast("Recuperé la visita que estabas llenando, con sus fotos.");
+}
+
 /* ===================== ejemplos ===================== */
 async function loadExamples() {
   const E = o => Object.assign({ ejemplo: true, coordAprox: false, estrategico: false, destacados: [], fotos: [], contacto: "", plantacion: "", proxima: "", recomendaciones: "", notas: "", manejo: "", fito: "Sano", fitoDetalle: "", evalVar: {}, creado: Date.now(), actualizado: Date.now() }, o, { zona: zonaV(o) });
@@ -2226,7 +2359,7 @@ document.addEventListener("click", async ev => {
   else if (a === "open") { S.detailId = t.dataset.id; show("detail"); }
   else if (a === "edit") { const v = byId(t.dataset.id); openForm({ ...JSON.parse(JSON.stringify(v)), nuevas: [] }); }
   else if (a === "again") { const v = byId(t.dataset.id); openForm({ cliente: v.cliente, estrategico: isEstr(v.cliente), predio: v.predio, contacto: v.contacto, region: v.region, comuna: v.comuna, lat: v.coordAprox ? null : v.lat, lng: v.coordAprox ? null : v.lng, variedades: [...v.variedades], evalVar: Object.fromEntries(v.variedades.filter(n => ((v.evalVar || {})[n] || {}).anios && v.evalVar[n].anios.length).map(n => [n, { anios: [...v.evalVar[n].anios] }])), superficie: v.superficie ?? "", plantacion: v.plantacion || "", etapa: v.etapa || "", etapas: [...(v.etapas || [])] }); }
-  else if (a === "cancelform") { (S.form.nuevas || []).forEach(n => URL.revokeObjectURL(n.url)); S.form = null; show(S.detailId && byId(S.detailId) ? "detail" : "list"); }
+  else if (a === "cancelform") { (S.form.nuevas || []).forEach(n => URL.revokeObjectURL(n.url)); clearDraft(); S.form = null; show(S.detailId && byId(S.detailId) ? "detail" : "list"); }
   else if (a === "estado") { S.form.estado = S.form.estado === t.dataset.v ? "" : t.dataset.v; document.querySelectorAll("#seg-estado button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.form.estado)); }
   else if (a === "fito") { S.form.fito = S.form.fito === t.dataset.v ? "" : t.dataset.v; document.querySelectorAll("#seg-fito button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.form.fito)); }
   else if (a === "logout") forgetCode();
@@ -2241,7 +2374,7 @@ document.addEventListener("click", async ev => {
   else if (a === "rmdest") { S.form.destacados.splice(+t.dataset.i, 1); renderDest(); }
   else if (a === "togetapa") { const x = t.dataset.e, L = S.form.etapas, i = L.indexOf(x); if (i >= 0) L.splice(i, 1); else L.push(x); L.sort((a, b) => ETAPAS.indexOf(a) - ETAPAS.indexOf(b)); renderEtapas(); }
   else if (a === "rmfoto") { S.form.fotos.splice(+t.dataset.i, 1); renderPhotos(); }
-  else if (a === "rmnueva") { const [r] = S.form.nuevas.splice(+t.dataset.i, 1); URL.revokeObjectURL(r.url); renderPhotos(); }
+  else if (a === "rmnueva") { const [r] = S.form.nuevas.splice(+t.dataset.i, 1); URL.revokeObjectURL(r.url); renderPhotos(); saveDraft(); }
   else if (a === "save") saveForm();
   else if (a === "del") {
     if (armed !== t.dataset.id) { armed = t.dataset.id; t.textContent = "Toca otra vez para eliminar"; t.classList.add("armed"); setTimeout(() => { armed = null; if (t.isConnected) { t.textContent = "Eliminar"; t.classList.remove("armed"); } }, 4000); return; }
@@ -2266,6 +2399,10 @@ document.addEventListener("click", async ev => {
   else if (a === "dtipo") { S.rep.dest = t.dataset.v; renderReport(); }
   else if (a === "copyinf") copyText(buildInforme(repVisits()));
   else if (a === "pdfinf") saveInformePdf();
+  else if (a === "vpdf") saveVisitsPdf(S.vsel || []);
+  else if (a === "vsel") { const L = S.vsel || (S.vsel = []), k = L.indexOf(t.dataset.id); if (t.checked && k < 0) L.push(t.dataset.id); else if (!t.checked && k >= 0) L.splice(k, 1); vselUpd(); }
+  else if (a === "vselall") { S.vsel = repVisits().map(v => v.id); renderReport(); }
+  else if (a === "vselnone") { S.vsel = []; renderReport(); }
   else if (a === "pptinf") savePptx();
   else if (a === "cliente") { S.f = { q: "", zona: "", variedad: "", tipo: "", cliente: t.dataset.v, estr: false }; show("list"); }
   else if (a === "clearcli") { S.f.cliente = ""; renderList(); }
@@ -2305,8 +2442,8 @@ document.addEventListener("input", ev => {
 document.addEventListener("change", ev => {
   const t = ev.target;
   if (t.id === "f-import") { if (t.files[0]) importBackup(t.files[0]); t.value = ""; return; }
-  if (t.dataset.fv && S.form) { const arr = t.dataset.fv === "old" ? S.form.fotos : S.form.nuevas; arr[+t.dataset.i].variedad = t.value; return; }
-  if (t.dataset.fc && S.form) { const arr = t.dataset.fc === "old" ? S.form.fotos : S.form.nuevas; arr[+t.dataset.i].cat = t.value; return; }
+  if (t.dataset.fv && S.form) { const arr = t.dataset.fv === "old" ? S.form.fotos : S.form.nuevas; arr[+t.dataset.i].variedad = t.value; saveDraft(); return; }
+  if (t.dataset.fc && S.form) { const arr = t.dataset.fc === "old" ? S.form.fotos : S.form.nuevas; arr[+t.dataset.i].cat = t.value; saveDraft(); return; }
   if (t.dataset.gact === "dest") {
     patchDest(t.dataset.id, +t.dataset.i, (() => {
       const k = t.dataset.k, val = t.type === "checkbox" ? t.checked : t.value, p = { [k]: val };
@@ -2537,7 +2674,10 @@ async function init() {
 
 { let rt = 0; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (S.view === "report" && S.rep.tab === "graficos") paintCharts(); }, 150); });
   try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.view === "report" && S.rep.tab === "graficos") paintCharts(); }); } catch (e) { } }
-init();
+document.addEventListener("input", ev => { if (S.form && ev.target.closest && ev.target.closest("#v-form")) saveDraft(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden && S.form) saveDraftNow(); });
+window.addEventListener("pagehide", () => { if (S.form) saveDraftNow(); });
+init().then(() => restoreDraft());
 </script>
 
 </html>
