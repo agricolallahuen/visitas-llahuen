@@ -250,6 +250,8 @@ svg text.mlbl { fill: var(--ink); font-family: var(--font-body); } svg text.mlbl
 .chk { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 14.5px; cursor: pointer; }
 .chk input { width: 20px; height: 20px; accent-color: var(--leaf); flex: none; }
 .evcard { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface-2); }
+.evsub { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+.evsub > b { font-size: 14px; color: var(--leaf); }
 .evcard > b { font-family: var(--font-display); font-size: 16px; }
 .dextra { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; align-items: center; padding-left: 0; }
 .fseg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -495,16 +497,23 @@ const wazeLink = v => `https://waze.com/ul?ll=${v.lat},${v.lng}&navigate=yes&zoo
 const gnavLink = v => `https://www.google.com/maps/dir/?api=1&destination=${v.lat},${v.lng}&travelmode=driving`;
 const navLinks = v => `<a href="${wazeLink(v)}" target="_blank" rel="noopener">Ir con Waze</a> · <a href="${gnavLink(v)}" target="_blank" rel="noopener">Ir con Google Maps</a> · <a href="${mapsLink(v)}" target="_blank" rel="noopener">Ver en mapa</a>`;
 const resAnioOf = (e, a) => ((e.resAnio || {})[a] || "").trim();
-function cuadroRows(v) {
-  const out = [];
-  for (const n of v.variedades || []) {
-    const e = (v.evalVar || {})[n] || {}, an = (e.anios || []).slice().sort();
-    if (!an.length) { if (e.resultado || e.estado) out.push({ n, a: "", estado: e.estado || "", res: e.resultado || "", c: e.cosecha || "", fp: e.fplant || "" }); continue; }
-    an.forEach(a => out.push({ n, a, c: e.cosecha || "", fp: e.fplant || "", estado: e.estado || "", res: resAnioOf(e, a) || (an.length === 1 ? (e.resultado || "") : (e.resultado ? e.resultado + " (general)" : "")) }));
-  }
+function lotesOf(e) {
+  if (e.lotes && Object.keys(e.lotes).length) return e.lotes;
+  const an = (e.anios || []).slice().sort(), out = {};
+  const any = e.estado || e.resultado || e.fplant || e.cosecha || Number(e.ha) > 0 || Object.values(e.resAnio || {}).some(Boolean);
+  if (!an.length) { if (any) out["0"] = { estado: e.estado || "", resultado: e.resultado || "", ha: e.ha || "", fplant: e.fplant || "", cosecha: e.cosecha || "", fito: "", fitoD: "" }; return out; }
+  an.forEach((a, k) => { out[a] = { estado: e.estado || "", resultado: resAnioOf(e, a) || e.resultado || "", ha: k === 0 ? (e.ha || "") : "", fplant: e.fplant || "", cosecha: e.cosecha || "", fito: "", fitoD: "" }; });
   return out;
 }
-const cuadroHtml = v => { const R = cuadroRows(v); return R.length ? `<div class="tbl"><table><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Fecha de plantación</th><th>Estado</th><th>Cosecha</th><th>Resultados observados</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${r.fp ? fmtD(r.fp) : "—"}</td><td>${esc(r.estado || "—")}</td><td>${r.c ? fmtD(r.c) : "—"}</td><td>${esc(r.res || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""; };
+const lotLabel = k => k === "0" ? "Año no indicado" : k + "° año";
+function cuadroRows(v) {
+  const out = [];
+  for (const n of v.variedades || []) { const e = (v.evalVar || {})[n]; if (!e) continue; const L = lotesOf(e);
+    Object.keys(L).sort().forEach(k => { const l = L[k]; out.push({ n, a: k === "0" ? "" : k, estado: l.estado || "", fito: l.fito || "", fd: l.fitoD || "", res: l.resultado || "", fp: l.fplant || "", c: l.cosecha || "", ha: l.ha || "" }); }); }
+  return out;
+}
+const fitoCell = r => r.fito ? esc(r.fito) + (r.fd ? ": " + esc(r.fd) : "") : (r.fd ? esc(r.fd) : "—");
+const cuadroHtml = v => { const R = cuadroRows(v); return R.length ? `<div class="tbl"><table><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Fecha de plantación</th><th>Estado</th><th>Fitosanidad</th><th>Cosecha</th><th>Resultados observados</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${r.fp ? fmtD(r.fp) : "—"}</td><td>${esc(r.estado || "—")}</td><td>${fitoCell(r)}</td><td>${r.c ? fmtD(r.c) : "—"}</td><td>${esc(r.res || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""; };
 const ANIOS = ["1", "2", "3"], anioTxt = a => (a || []).slice().sort().map(x => x + "°").join(" + "), aniosVar = (v, n) => anioTxt(((v.evalVar || {})[n] || {}).anios);
 const FUENTES = { gps: "GPS en el predio", manual: "manual", foto: "GPS al tomar la foto" };
 const ico = (id, cls = "") => `<svg class="ico ${cls}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
@@ -856,7 +865,9 @@ function renderDetail() {
     ["Predio", v.predio || "—"], ["Contacto", v.contacto || "—"], ["Superficie", v.superficie ? nfmt(v.superficie) + " ha" : "—"],
     ["Plantación", fmtD(v.plantacion)], ["Etapa", v.etapa || "—"], ["Próxima visita", fmtD(v.proxima)]
   ].map(([k, x]) => `<div><span>${k}</span><b>${esc(x)}</b></div>`).join("");
-  const evs = v.variedades.filter(n => v.evalVar[n]).map(n => { const e = v.evalVar[n]; return `<li><span class="pill e-${e.estado || "Regular"}" style="${e.estado ? "" : "--c:var(--muted)"}">${esc(n)}${e.estado ? " · " + esc(e.estado) : ""}</span><span>${(e.anios || []).length ? `<b>${anioTxt(e.anios)} año de plantación</b> ` : ""}${esc(e.resultado || "")}${e.fplant ? `<div class="muted small">Plantación: ${fmtD(e.fplant)}</div>` : ""}${e.cosecha ? `<div class="muted small">Cosecha: ${fmtD(e.cosecha)}</div>` : ""}${e.ha ? `<div class="muted small">${nfmt(e.ha)} ha de esta variedad</div>` : ""}${e.nueva ? `<div class="muted small">Variedad nueva · ${esc(e.adopcion || "En evaluación")}${e.protocolo ? " · protocolo entregado" : ""}</div>` : ""}</span></li>`; }).join("");
+  const evs = v.variedades.filter(n => v.evalVar[n]).map(n => { const e = v.evalVar[n], L = lotesOf(e);
+    const lines = Object.keys(L).sort().map(k => { const l = L[k]; return `<div class="small"><b>${lotLabel(k)}</b>${l.estado ? " · " + esc(l.estado) : ""}${l.fito ? " · fitosanidad: " + esc(l.fito.toLowerCase()) : ""}${l.resultado ? " — " + esc(l.resultado) : ""}${l.fitoD ? `<div class="muted">${esc(l.fitoD)}</div>` : ""}${l.fplant ? `<div class="muted">Plantación: ${fmtD(l.fplant)}</div>` : ""}${l.cosecha ? `<div class="muted">Cosecha: ${fmtD(l.cosecha)}</div>` : ""}${l.ha ? `<div class="muted">${nfmt(l.ha)} ha</div>` : ""}</div>`; }).join("");
+    return `<li><span class="pill e-${e.estado || "Regular"}" style="${e.estado ? "" : "--c:var(--muted)"}">${esc(n)}${e.estado ? " · " + esc(e.estado) : ""}</span><span>${lines}${e.nueva ? `<div class="muted small">Variedad nueva · ${esc(e.adopcion || "En evaluación")}${e.protocolo ? " · protocolo entregado" : ""}</div>` : ""}</span></li>`; }).join("");
   el.innerHTML = `
     <div class="h-row"><button class="btn ghost" data-act="go" data-v="list">← Visitas</button>
       <span>${v.ejemplo ? '<span class="ejemplo">EJEMPLO</span>' : ""}</span></div>
@@ -951,10 +962,8 @@ function renderForm() {
 
     <div class="panel">${h3i("Evaluación en terreno", "leaf")}
       <div class="field"><span class="lbl">Estado general del cultivo</span><div class="seg" id="seg-estado">${ESTADOS.map(e => `<button type="button" class="e-${e}" data-act="estado" data-v="${e}" aria-pressed="${F.estado === e}">${e}</button>`).join("")}</div></div>
-      <div class="field"><span class="lbl">Estado fitosanitario</span><div class="fseg" id="seg-fito">${FITO.map(e => `<button type="button" class="f-${e}" data-act="fito" data-v="${e}" aria-pressed="${F.fito === e}">${e}</button>`).join("")}</div>
-        <textarea id="f-fitod" style="min-height:64px" placeholder="Plagas, enfermedades, deficiencias, incidencia observada">${esc(F.fitoDetalle)}</textarea></div>
       <div class="field"><label for="f-manejo">Manejo agronómico observado</label><textarea id="f-manejo" style="min-height:72px" placeholder="Riego, fertilización, control de malezas, cobertura, labores">${esc(F.manejo)}</textarea></div>
-      <div class="field"><span class="lbl">Resultado y adopción por variedad</span><div id="evalvars" style="display:flex;flex-direction:column;gap:10px"></div></div>
+      <div class="field"><span class="lbl">Registro por variedad y año de plantación (estado, fitosanidad, resultados y fechas)</span><div id="evalvars" style="display:flex;flex-direction:column;gap:10px"></div></div>
     </div>
 
     <div class="panel">${h3i("Puntos destacados", "flag")}<p class="muted small" style="margin:0">Registra reclamos, riesgos, oportunidades comerciales, logros y recomendaciones. Los reclamos y oportunidades quedan en Gestión para su seguimiento.</p>
@@ -978,21 +987,30 @@ function renderVarChips() {
 }
 function renderEvalVars() {
   const F = S.form, box = $("#evalvars");
-  if (!F.variedades.length) { box.innerHTML = `<p class="muted small" style="margin:0">Elige las variedades del predio para evaluar cada una.</p>`; return; }
+  if (!F.variedades.length) { box.innerHTML = `<p class="muted small" style="margin:0">Elige las variedades del predio para registrar cada una.</p>`; return; }
   box.innerHTML = F.variedades.map((n, i) => {
     const e = F.evalVar[n] || (F.evalVar[n] = {});
+    if (!e.lotes) e.lotes = lotesOf(e);
     const ft0 = fotoper(n, F), fts = (FOTOPER.dc.concat(FOTOPER.dn).some(x => nrm(x) === nrm(n)));
+    const keys = (e.anios || []).length ? (e.anios || []).slice().sort() : ["0"];
+    const sub = keys.map(k => { const l = e.lotes[k] || (e.lotes[k] = {}), P = `lot:${k}:`;
+      return `<div class="evsub"><b>${esc(n)} · ${lotLabel(k)}</b>
+        <div class="grid2">
+          <div class="field"><label>Estado</label><select data-ev="${i}" data-k="${P}estado" aria-label="Estado de ${esc(n)} ${lotLabel(k)}"><option value="">Sin evaluar</option>${ESTADOS.map(x => `<option ${x === l.estado ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+          <div class="field"><label>Estado fitosanitario</label><select data-ev="${i}" data-k="${P}fito" aria-label="Estado fitosanitario de ${esc(n)} ${lotLabel(k)}"><option value="">Sin evaluar</option>${FITO.map(x => `<option ${x === l.fito ? "selected" : ""}>${x}</option>`).join("")}</select></div>
+        </div>
+        <div class="field"><label>Detalle fitosanitario</label><input type="text" data-ev="${i}" data-k="${P}fitoD" value="${esc(l.fitoD || "")}" placeholder="Plagas, enfermedades, deficiencias, incidencia" aria-label="Detalle fitosanitario de ${esc(n)} ${lotLabel(k)}"></div>
+        <div class="field"><label>Resultado observado</label><input type="text" data-ev="${i}" data-k="${P}resultado" value="${esc(l.resultado || "")}" placeholder="Vigor, cuajado, calibre, rendimiento" aria-label="Resultado de ${esc(n)} ${lotLabel(k)}"></div>
+        <div class="grid2">
+          <div class="field"><label>Fecha de plantación</label><input type="date" data-ev="${i}" data-k="${P}fplant" value="${esc(l.fplant || "")}" aria-label="Fecha de plantación de ${esc(n)} ${lotLabel(k)}"></div>
+          <div class="field"><label>Fecha de cosecha</label><input type="date" data-ev="${i}" data-k="${P}cosecha" value="${esc(l.cosecha || "")}" aria-label="Fecha de cosecha de ${esc(n)} ${lotLabel(k)}"></div>
+        </div>
+        <div class="field"><label>Superficie (ha, opcional)</label><input type="number" step="0.1" min="0" inputmode="decimal" data-ev="${i}" data-k="${P}ha" value="${esc(l.ha || "")}" aria-label="Hectáreas de ${esc(n)} ${lotLabel(k)}"></div>
+      </div>`; }).join("");
     return `<div class="evcard"><b>${esc(n)} ${ft0 ? `<span class="zone-tag">${ft0}</span>` : ""}</b>
-      <div class="field"><span class="lbl">Año de plantación (puedes marcar más de uno)</span><div class="chips">${ANIOS.map(a => `<button type="button" class="chip" data-act="anio" data-i="${i}" data-a="${a}" aria-pressed="${(e.anios || []).includes(a)}">${a}° año</button>`).join("")}</div></div>
-      ${(e.anios || []).length ? `<div class="field"><span class="lbl">Resultados observados por año de plantación</span>${(e.anios || []).slice().sort().map(a => `<label class="small muted" style="display:block;margin-top:4px">${a}° año</label><input type="text" data-ev="${i}" data-k="res:${a}" value="${esc(resAnioOf(e, a))}" placeholder="Vigor, cuajado, calibre, rendimiento del ${a}° año" aria-label="Resultado de ${esc(n)} ${a}° año">`).join("")}</div>` : ""}
+      <div class="field"><span class="lbl">Año de plantación (marca uno o varios; cada año se registra por separado)</span><div class="chips">${ANIOS.map(a => `<button type="button" class="chip" data-act="anio" data-i="${i}" data-a="${a}" aria-pressed="${(e.anios || []).includes(a)}">${a}° año</button>`).join("")}</div></div>
+      ${sub}
       ${fts ? "" : `<div class="field"><label>Fotoperíodo</label><select data-ev="${i}" data-k="fotoper" aria-label="Fotoperíodo de ${esc(n)}"><option value="">Sin clasificar</option>${["Día corto", "Día neutro"].map(x => `<option ${x === e.fotoper ? "selected" : ""}>${x}</option>`).join("")}</select></div>`}
-      <div class="grid2">
-        <div class="field"><label>Estado</label><select data-ev="${i}" data-k="estado" aria-label="Estado de ${esc(n)}"><option value="">Sin evaluar</option>${ESTADOS.map(x => `<option ${x === e.estado ? "selected" : ""}>${x}</option>`).join("")}</select></div>
-        <div class="field"><label>Resultado observado</label><input type="text" data-ev="${i}" data-k="resultado" value="${esc(e.resultado || "")}" placeholder="Vigor, cuajado, calibre, rendimiento" aria-label="Resultado de ${esc(n)}"></div>
-      </div>
-      <div class="field"><label>Fecha de plantación (opcional)</label><input type="date" data-ev="${i}" data-k="fplant" value="${esc(e.fplant || "")}" aria-label="Fecha de plantación de ${esc(n)}"></div>
-      <div class="field"><label>Fecha de cosecha (opcional)</label><input type="date" data-ev="${i}" data-k="cosecha" value="${esc(e.cosecha || "")}" aria-label="Fecha de cosecha de ${esc(n)}"></div>
-      <div class="field"><label>Superficie de esta variedad (ha, opcional)</label><input type="number" step="0.1" min="0" inputmode="decimal" data-ev="${i}" data-k="ha" value="${esc(e.ha || "")}" aria-label="Hectáreas de ${esc(n)}"></div>
       <label class="chk"><input type="checkbox" data-ev="${i}" data-k="nueva" ${e.nueva ? "checked" : ""}> Variedad nueva en evaluación</label>
       ${e.nueva ? `<div class="grid2"><div class="field"><label>Etapa de adopción</label><select data-ev="${i}" data-k="adopcion" aria-label="Etapa de adopción de ${esc(n)}">${ADOPCION.map(x => `<option ${x === (e.adopcion || "En evaluación") ? "selected" : ""}>${x}</option>`).join("")}</select></div>
         <label class="chk"><input type="checkbox" data-ev="${i}" data-k="protocolo" ${e.protocolo ? "checked" : ""}> Protocolo de manejo entregado</label></div>` : ""}
@@ -1207,7 +1225,7 @@ function collectForm() {
   F.fecha = $("#f-fecha").value; F.tipo = $("#f-tipov").value; F.cliente = g("#f-cliente"); F.predio = g("#f-predio"); F.contacto = g("#f-contacto");
   F.estrategico = $("#f-estr").checked;
   F.region = $("#f-region").value; F.comuna = g("#f-comuna"); F.superficie = $("#f-sup").value; F.plantacion = $("#f-plant").value; F.etapa = (F.etapas || []).join(" + ");
-  F.fitoDetalle = g("#f-fitod"); F.manejo = g("#f-manejo");
+  F.manejo = g("#f-manejo");
   F.notas = $("#f-notas").value.trim(); F.recomendaciones = $("#f-reco").value.trim(); F.proxima = $("#f-prox").value;
   const c = parseCoords($("#f-coords").value);
   if (c) { if (c.lat !== F.lat || c.lng !== F.lng) { F.coordFuente = "manual"; F.prec = null; } F.lat = c.lat; F.lng = c.lng; F.coordAprox = false; }
@@ -1225,11 +1243,26 @@ async function saveForm() {
   const btn = $("#savebtn"); btn.disabled = true; btn.textContent = "Guardando…";
   try {
     const evalVar = {};
-    for (const n of F.variedades) { const e = F.evalVar[n]; if (e && (e.estado || e.resultado || e.nueva || e.fotoper || e.cosecha || e.fplant || Number(e.ha) > 0 || (e.anios || []).length)) evalVar[n] = { cosecha: e.cosecha || "", fplant: e.fplant || "", resAnio: Object.fromEntries((e.anios || []).map(a => [a, ((e.resAnio || {})[a] || "").trim()]).filter(x => x[1])), ha: Number(e.ha) > 0 ? Number(e.ha) : null, anios: (e.anios || []).slice().sort(), fotoper: e.fotoper || "", estado: e.estado || "", resultado: e.resultado || "", nueva: !!e.nueva, adopcion: e.nueva ? (e.adopcion || "En evaluación") : "", protocolo: !!e.protocolo && !!e.nueva }; }
+    let fitoPeor = "", fitoTxt = [];
+    for (const n of F.variedades) { const e = F.evalVar[n]; if (!e) continue;
+      const an = (e.anios || []).slice().sort(), keys = an.length ? an : ["0"], lotes = {};
+      for (const k of keys) { const l = (e.lotes || {})[k]; if (!l) continue;
+        const c = { estado: l.estado || "", fito: l.fito || "", fitoD: (l.fitoD || "").trim(), resultado: (l.resultado || "").trim(), ha: Number(l.ha) > 0 ? Number(l.ha) : "", fplant: l.fplant || "", cosecha: l.cosecha || "" };
+        if (Object.values(c).some(x => x !== "")) lotes[k] = c; }
+      const ks = Object.keys(lotes).sort(); if (!ks.length && !e.nueva && !e.fotoper && !an.length) continue;
+      const sc = ks.map(k => ESCORE[lotes[k].estado]).filter(Boolean), peor = sc.length ? Object.keys(ESCORE).find(x => ESCORE[x] === Math.min(...sc)) : "";
+      const has = ks.map(k => Number(lotes[k].ha)).filter(x => x > 0);
+      evalVar[n] = { lotes, anios: an, estado: peor, resultado: ks.length === 1 ? lotes[ks[0]].resultado : ks.filter(k => lotes[k].resultado).map(k => lotLabel(k) + ": " + lotes[k].resultado).join(" | "),
+        resAnio: Object.fromEntries(an.filter(a => lotes[a] && lotes[a].resultado).map(a => [a, lotes[a].resultado])), ha: has.length ? has.reduce((x, y) => x + y, 0) : null,
+        fplant: (ks.map(k => lotes[k].fplant).filter(Boolean).sort()[0]) || "", cosecha: (ks.map(k => lotes[k].cosecha).filter(Boolean).sort()[0]) || "",
+        fotoper: e.fotoper || "", nueva: !!e.nueva, adopcion: e.nueva ? (e.adopcion || "En evaluación") : "", protocolo: !!e.protocolo && !!e.nueva };
+      for (const k of ks) { const l = lotes[k]; if (l.fito && FITO.indexOf(l.fito) > FITO.indexOf(fitoPeor)) fitoPeor = l.fito; if (l.fito || l.fitoD) fitoTxt.push(`${n} ${lotLabel(k)}${l.fito ? " (" + l.fito.toLowerCase() + ")" : ""}${l.fitoD ? ": " + l.fitoD : ""}`); }
+    }
+    const fitoV = fitoPeor || F.fito || "", fitoD = fitoTxt.length ? fitoTxt.join(". ") : (F.fitoDetalle || "");
     const doc = {
       fecha: F.fecha, tipo: F.tipo, cliente: F.cliente, estrategico: !!F.estrategico, predio: F.predio, contacto: F.contacto, region: F.region, comuna: F.comuna,
       lat: F.lat, lng: F.lng, coordAprox: !!F.coordAprox, prec: F.coordAprox ? null : (F.prec || null), coordFuente: F.coordAprox ? "" : (F.coordFuente || ""), superficie: F.superficie === "" ? null : Number(F.superficie), plantacion: F.plantacion,
-      etapa: (F.etapas || []).join(" + "), etapas: [...(F.etapas || [])], estado: F.estado, fito: F.fito, fitoDetalle: F.fitoDetalle, manejo: F.manejo, variedades: F.variedades, evalVar,
+      etapa: (F.etapas || []).join(" + "), etapas: [...(F.etapas || [])], estado: F.estado, fito: fitoV, fitoDetalle: fitoD, manejo: F.manejo, variedades: F.variedades, evalVar,
       notas: F.notas, recomendaciones: F.recomendaciones, proxima: F.proxima, destacados: dest,
       fotos: [...F.fotos], zona: zonaV(F), ejemplo: !!F.ejemplo, creado: F.creado || Date.now(), actualizado: Date.now()
     };
@@ -1375,7 +1408,7 @@ function cuadroGlobal(vs) {
   [...vs].sort((a, b) => a.fecha.localeCompare(b.fecha)).forEach(v => cuadroRows(v).forEach(r => M.set([r.n, r.a, v.cliente].join("|"), { ...r, cos: r.c, c: v.cliente, reg: v.region, f: v.fecha })));
   const R = [...M.values()].sort((a, b) => a.n.localeCompare(b.n, "es") || a.a.localeCompare(b.a) || a.c.localeCompare(b.c, "es"));
   if (!R.length) return "";
-  return `<h3 style="margin:14px 0 6px">Resultados observados por variedad y año de plantación</h3><div class="tbl"><table data-name="resultados-variedad-anio"><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Fecha de plantación</th><th>Cliente</th><th>Región</th><th>Estado</th><th>Cosecha</th><th>Resultados observados</th><th>Visita</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${r.fp ? fmtD(r.fp) : "—"}</td><td>${esc(r.c)}</td><td>${esc(r.reg)}</td><td>${esc(r.estado || "—")}</td><td>${r.cos ? fmtD(r.cos) : "—"}</td><td>${esc(r.res || "—")}</td><td>${r.f}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<h3 style="margin:14px 0 6px">Resultados observados por variedad y año de plantación</h3><div class="tbl"><table data-name="resultados-variedad-anio"><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Fecha de plantación</th><th>Cliente</th><th>Región</th><th>Estado</th><th>Fitosanidad</th><th>Cosecha</th><th>Resultados observados</th><th>Visita</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${r.fp ? fmtD(r.fp) : "—"}</td><td>${esc(r.c)}</td><td>${esc(r.reg)}</td><td>${esc(r.estado || "—")}</td><td>${fitoCell(r)}</td><td>${r.cos ? fmtD(r.cos) : "—"}</td><td>${esc(r.res || "—")}</td><td>${r.f}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function repVariedad(vs) {
   const names = uniq(vs.flatMap(v => v.variedades)).sort((a, b) => a.localeCompare(b, "es"));
@@ -2277,10 +2310,10 @@ async function saveVisitsPdf(ids) {
       const vars = v.variedades || [];
       if (vars.length) {
         head("Variedades evaluadas");
-        for (const n of vars) { const e = (v.evalVar || {})[n] || {}; const meta = [e.anios && e.anios.length ? e.anios.join(" y ") + " año" : "", e.fplant ? "plantada " + fmtD(e.fplant) : "", e.cosecha ? "cosecha " + fmtD(e.cosecha) : "", e.ha ? nfmt(e.ha) + " ha" : "", e.estado, e.nueva ? "variedad nueva" : "", e.adopcion].filter(Boolean).join(" - ");
-          para(n + (meta ? "  (" + meta + ")" : ""), { bold: true });
-          const ra = (e.anios || []).slice().sort().filter(a => resAnioOf(e, a));
-          ra.forEach(a => para(a + "° año: " + resAnioOf(e, a), { ind: 4, c: MUTED })); if (e.resultado) para((ra.length ? "General: " : "") + e.resultado, { ind: 4, c: MUTED }); }
+        for (const n of vars) { const e = (v.evalVar || {})[n] || {}; const L = lotesOf(e), ks = Object.keys(L).sort();
+          para(n + (e.nueva || e.fotoper ? "  (" + [e.nueva ? "variedad nueva" : "", e.adopcion, e.fotoper].filter(Boolean).join(" - ") + ")" : ""), { bold: true });
+          ks.forEach(k => { const l = L[k]; const meta = [l.estado, l.fito ? "fitosanidad " + l.fito.toLowerCase() : "", l.fplant ? "plantada " + fmtD(l.fplant) : "", l.cosecha ? "cosecha " + fmtD(l.cosecha) : "", l.ha ? nfmt(l.ha) + " ha" : ""].filter(Boolean).join(" - ");
+            para(lotLabel(k) + (meta ? "  (" + meta + ")" : ""), { ind: 4 }); if (l.resultado) para(l.resultado, { ind: 8, c: MUTED }); if (l.fitoD) para("Fitosanidad: " + l.fitoD, { ind: 8, c: MUTED }); }); }
       }
       const agro = v.manejo || v.notas || v.fito || v.fitoDetalle;
       if (agro) { head("Notas agronómicas");
@@ -2395,7 +2428,9 @@ document.addEventListener("click", async ev => {
   else if (a === "fito") { S.form.fito = S.form.fito === t.dataset.v ? "" : t.dataset.v; document.querySelectorAll("#seg-fito button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.form.fito)); }
   else if (a === "logout") forgetCode();
   else if (a === "install") { if (INSTALL_EV) { INSTALL_EV.prompt(); INSTALL_EV = null; } }
-  else if (a === "anio") { const F = S.form, n = F.variedades[+t.dataset.i]; if (n) { const e = F.evalVar[n] || (F.evalVar[n] = {}), L = e.anios || (e.anios = []), k = L.indexOf(t.dataset.a); if (k >= 0) L.splice(k, 1); else L.push(t.dataset.a); t.setAttribute("aria-pressed", String(k < 0)); } }
+  else if (a === "anio") { const F = S.form, n = F.variedades[+t.dataset.i]; if (n) { const e = F.evalVar[n] || (F.evalVar[n] = {}), L = e.anios || (e.anios = []), k = L.indexOf(t.dataset.a); if (!e.lotes) e.lotes = lotesOf(e);
+    if (k >= 0) L.splice(k, 1); else { if (!L.length && e.lotes["0"] && !e.lotes[t.dataset.a]) { e.lotes[t.dataset.a] = e.lotes["0"]; delete e.lotes["0"]; } L.push(t.dataset.a); }
+    const y = window.scrollY; renderEvalVars(); window.scrollTo(0, y); saveDraft(); } }
   else if (a === "gps") gpsFix();
   else if (a === "gpsstop") { if (GPSJOB) GPSJOB.stop(); }
   else if (a === "nudge") nudge(t.dataset.d);
@@ -2452,7 +2487,7 @@ function setEv(t) {
   const F = S.form, n = F.variedades[+t.dataset.ev]; if (!n) return;
   const e = F.evalVar[n] || (F.evalVar[n] = {});
   const k = t.dataset.k;
-  if (k.startsWith("res:")) { (e.resAnio || (e.resAnio = {}))[k.slice(4)] = t.value; return; }
+  if (k.startsWith("lot:")) { const [, a, f] = k.split(":"); if (!e.lotes) e.lotes = lotesOf(e); (e.lotes[a] || (e.lotes[a] = {}))[f] = t.value; return; }
   e[k] = t.type === "checkbox" ? t.checked : t.value;
 }
 function setDest(t) {
