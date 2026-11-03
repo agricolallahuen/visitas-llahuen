@@ -250,6 +250,8 @@ svg text.mlbl { fill: var(--ink); font-family: var(--font-body); } svg text.mlbl
 .chk { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 14.5px; cursor: pointer; }
 .chk input { width: 20px; height: 20px; accent-color: var(--leaf); flex: none; }
 .evcard { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface-2); }
+body.ro [data-act="new"], body.ro [data-act="edit"], body.ro [data-act="again"], body.ro [data-act="del"], body.ro [data-act="examples"], body.ro [data-act="delex"], body.ro [data-act="derivar"], body.ro [data-act="aviso"], body.ro [data-act="sync"], body.ro #t-form, body.ro label:has(#f-import) { display: none !important; }
+#robar { background: var(--leaf-soft, #DCEBE1); color: var(--ink, #17251D); font-size: 13px; text-align: center; padding: 6px 12px; border-bottom: 1px solid var(--line, #D2DBD1); }
 .evsub { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
 .evsub > b { font-size: 14px; color: var(--leaf); }
 .evcard > b { font-family: var(--font-display); font-size: 16px; }
@@ -2566,7 +2568,7 @@ let SB = null, SB_PULL = null;
 const lsGet = k => { try { return JSON.parse(localStorage.getItem("llahuen." + k)); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem("llahuen." + k, JSON.stringify(v)); } catch (e) { } };
 const lsDel = k => { try { localStorage.removeItem("llahuen." + k); } catch (e) { } };
-const canEdit = () => true;
+const canEdit = () => S.rol !== "lector";
 const sbErr = e => {
   const c = e && (e.code || e.statusCode), msg = (e && e.message) || "error";
   const perm = c === "42501" || c === 403 || c === "403" || /row-level security|permission denied|not authorized/i.test(msg);
@@ -2671,6 +2673,8 @@ async function teamBoot() {
   try { const d = await SB.from("directorio").select("data").eq("id", 1).maybeSingle(); if (d.data && d.data.data) { setDirectorio(d.data.data); lsSet("dir", d.data.data); } } catch (e) { }
   teamClose();
   const ad = makeSbAdapter(); S.db = ad.db; S.assets = ad.assets;
+  try { const r = await SB.rpc("mi_rol"); S.rol = r && !r.error && r.data === "lector" ? "lector" : "editor"; } catch (e) { S.rol = "editor"; }
+  if (S.rol === "lector") { document.body.classList.add("ro"); const b = document.createElement("div"); b.id = "robar"; b.textContent = "Acceso de solo lectura: puedes revisar visitas, reportes y fotos, pero no modificar información."; document.body.prepend(b); }
 }
 let INSTALL_EV = null;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); INSTALL_EV = e; });
@@ -2678,7 +2682,7 @@ function accountPanel() {
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), mobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent), inst = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   const how = ios ? "en Safari toca el botón Compartir y luego “Agregar a inicio”." : mobile ? "en Chrome toca el menú ⋮ y luego “Instalar aplicación” o “Agregar a la pantalla principal”." : "en Chrome o Edge usa el ícono de instalar al final de la barra de direcciones, o el menú ⋮ → “Instalar Visitas Llahuen”.";
   return `<div class="panel">${h3i("Instalación y acceso", "leaf")}
-    ${TEAM ? `<p class="muted small" style="margin:0">Conectado a los datos compartidos del equipo.</p>` : ""}
+    ${TEAM ? `<p class="muted small" style="margin:0">Conectado a los datos compartidos del equipo${S.rol === "lector" ? " · acceso de solo lectura" : ""}.</p>` : ""}
     ${inst ? '<p class="muted small" style="margin:0">La app ya está instalada en este dispositivo.</p>' : (INSTALL_EV ? '<button class="btn primary" data-act="install">Instalar en este dispositivo</button>' : `<p class="muted small" style="margin:0"><b>Instalar:</b> ${how}</p>`)}
     ${TEAM && !CFG.teamCode ? '<button class="btn danger ghost" data-act="logout">Cerrar el acceso en este dispositivo</button>' : ""}
   </div>`;
