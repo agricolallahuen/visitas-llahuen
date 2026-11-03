@@ -1,4 +1,4 @@
-const V = "llahuen-1793040396";
+const V = "llahuen-1793712236";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "config.js", "icon-192.png", "icon-512.png"];
 const CDN = ["cdn.jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
