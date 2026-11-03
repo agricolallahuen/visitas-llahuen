@@ -1151,14 +1151,17 @@ async function compress(file) {
   } finally { if (bmp && bmp.close) bmp.close(); if (c) { c.width = 1; c.height = 1; } if (url) URL.revokeObjectURL(url); img = null; }
 }
 let _addBusy = false;
-async function addPhotos(files) {
+async function addPhotos(files, ids) {
   const F = S.form; if (!F) return;
   const q = [...files]; let bad = 0;
   for (let i = 0; i < q.length; i++) {
     if (S.form !== F) return;
     if (q.length > 1) toast(`Procesando foto ${i + 1} de ${q.length}…`);
-    try { const blob = await compress(q[i]); F.nuevas.push({ blob, url: URL.createObjectURL(blob), cat: "", variedad: "" }); renderPhotos(); await saveDraftNow(); }
+    const pid = (ids && ids[i]) || ("dpend-" + newId());
+    if (!ids) { if (i === 0) { try { await saveDraftNow(); } catch (e) { } } try { await IDB.put("blobs", { id: pid, blob: q[i], pend: true }); } catch (e) { } }
+    try { const blob = await compress(q[i]); F.nuevas.push({ blob, url: URL.createObjectURL(blob), cat: "", variedad: "", desc: "" }); renderPhotos(); await saveDraftNow(); }
     catch (e) { bad++; }
+    try { await IDB.del("blobs", pid); } catch (e) { }
     await new Promise(r => setTimeout(r, 60));
   }
   if (bad) toast(bad + " foto(s) no se pudieron leer (¿formato HEIC?). Usa JPG o PNG.");
@@ -2331,15 +2334,17 @@ async function saveDraftNow() {
   try { const { nuevas, ...rest } = F; await IDB.put("blobs", { id: "draft-form", form: JSON.parse(JSON.stringify(rest)), nuevas: (nuevas || []).map(n => ({ blob: n.blob, cat: n.cat || "", variedad: n.variedad || "", desc: n.desc || "" })), t: Date.now(), sy: Math.round(window.scrollY || 0) }); } catch (e) { }
 }
 function saveDraft() { clearTimeout(_dT); _dT = setTimeout(saveDraftNow, 700); }
-async function clearDraft() { clearTimeout(_dT); try { await IDB.del("blobs", "draft-form"); } catch (e) { } }
+async function clearDraft() { clearTimeout(_dT); try { await IDB.del("blobs", "draft-form"); for (const b of await IDB.all("blobs")) if (String(b.id).startsWith("dpend-")) await IDB.del("blobs", b.id); } catch (e) { } }
 async function restoreDraft() {
   if (S.form || !IDB.db) return;
-  let d = null; try { d = await IDB.get("blobs", "draft-form"); } catch (e) { }
-  if (!d || !d.form || !canEdit()) return;
-  const f = d.form; if (!f.cliente && !(d.nuevas || []).length && !f.notas) { clearDraft(); return; }
+  let d = null, pend = []; try { d = await IDB.get("blobs", "draft-form"); pend = (await IDB.all("blobs")).filter(b => String(b.id).startsWith("dpend-") && b.blob); } catch (e) { }
+  if (!canEdit() || ((!d || !d.form) && !pend.length)) return;
+  d = d || { form: {}, nuevas: [] };
+  const f = d.form; if (!f.cliente && !(d.nuevas || []).length && !f.notas && !pend.length) { clearDraft(); return; }
   S.form = blankForm({ ...f, nuevas: (d.nuevas || []).map(n => ({ blob: n.blob, url: URL.createObjectURL(n.blob), cat: n.cat, variedad: n.variedad, desc: n.desc || "" })) });
   show("form"); renderForm(); renderEtapas(); toast("Recuperé la visita que estabas llenando, con sus fotos.");
   const y = d.sy || 0; if (y > 0) [0, 150, 500, 1200].forEach(ms => setTimeout(() => window.scrollTo(0, y), ms));
+  if (pend.length) { toast("Recuperando " + pend.length + " foto(s) que se estaban cargando…"); await addPhotos(pend.map(x => x.blob), pend.map(x => x.id)); }
 }
 
 /* ===================== ejemplos ===================== */
