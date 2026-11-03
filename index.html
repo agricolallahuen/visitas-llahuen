@@ -499,12 +499,12 @@ function cuadroRows(v) {
   const out = [];
   for (const n of v.variedades || []) {
     const e = (v.evalVar || {})[n] || {}, an = (e.anios || []).slice().sort();
-    if (!an.length) { if (e.resultado || e.estado) out.push({ n, a: "", estado: e.estado || "", res: e.resultado || "", c: e.cosecha || "" }); continue; }
-    an.forEach(a => out.push({ n, a, c: e.cosecha || "", estado: e.estado || "", res: resAnioOf(e, a) || (an.length === 1 ? (e.resultado || "") : (e.resultado ? e.resultado + " (general)" : "")) }));
+    if (!an.length) { if (e.resultado || e.estado) out.push({ n, a: "", estado: e.estado || "", res: e.resultado || "", c: e.cosecha || "", fp: e.fplant || "" }); continue; }
+    an.forEach(a => out.push({ n, a, c: e.cosecha || "", fp: e.fplant || "", estado: e.estado || "", res: resAnioOf(e, a) || (an.length === 1 ? (e.resultado || "") : (e.resultado ? e.resultado + " (general)" : "")) }));
   }
   return out;
 }
-const cuadroHtml = v => { const R = cuadroRows(v); return R.length ? `<div class="tbl"><table><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Estado</th><th>Cosecha</th><th>Resultados observados</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${esc(r.estado || "—")}</td><td>${r.c ? fmtD(r.c) : "—"}</td><td>${esc(r.res || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""; };
+const cuadroHtml = v => { const R = cuadroRows(v); return R.length ? `<div class="tbl"><table><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Fecha de plantación</th><th>Estado</th><th>Cosecha</th><th>Resultados observados</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${r.fp ? fmtD(r.fp) : "—"}</td><td>${esc(r.estado || "—")}</td><td>${r.c ? fmtD(r.c) : "—"}</td><td>${esc(r.res || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""; };
 const ANIOS = ["1", "2", "3"], anioTxt = a => (a || []).slice().sort().map(x => x + "°").join(" + "), aniosVar = (v, n) => anioTxt(((v.evalVar || {})[n] || {}).anios);
 const FUENTES = { gps: "GPS en el predio", manual: "manual", foto: "GPS al tomar la foto" };
 const ico = (id, cls = "") => `<svg class="ico ${cls}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
@@ -856,7 +856,7 @@ function renderDetail() {
     ["Predio", v.predio || "—"], ["Contacto", v.contacto || "—"], ["Superficie", v.superficie ? nfmt(v.superficie) + " ha" : "—"],
     ["Plantación", fmtD(v.plantacion)], ["Etapa", v.etapa || "—"], ["Próxima visita", fmtD(v.proxima)]
   ].map(([k, x]) => `<div><span>${k}</span><b>${esc(x)}</b></div>`).join("");
-  const evs = v.variedades.filter(n => v.evalVar[n]).map(n => { const e = v.evalVar[n]; return `<li><span class="pill e-${e.estado || "Regular"}" style="${e.estado ? "" : "--c:var(--muted)"}">${esc(n)}${e.estado ? " · " + esc(e.estado) : ""}</span><span>${(e.anios || []).length ? `<b>${anioTxt(e.anios)} año de plantación</b> ` : ""}${esc(e.resultado || "")}${e.cosecha ? `<div class="muted small">Cosecha: ${fmtD(e.cosecha)}</div>` : ""}${e.ha ? `<div class="muted small">${nfmt(e.ha)} ha de esta variedad</div>` : ""}${e.nueva ? `<div class="muted small">Variedad nueva · ${esc(e.adopcion || "En evaluación")}${e.protocolo ? " · protocolo entregado" : ""}</div>` : ""}</span></li>`; }).join("");
+  const evs = v.variedades.filter(n => v.evalVar[n]).map(n => { const e = v.evalVar[n]; return `<li><span class="pill e-${e.estado || "Regular"}" style="${e.estado ? "" : "--c:var(--muted)"}">${esc(n)}${e.estado ? " · " + esc(e.estado) : ""}</span><span>${(e.anios || []).length ? `<b>${anioTxt(e.anios)} año de plantación</b> ` : ""}${esc(e.resultado || "")}${e.fplant ? `<div class="muted small">Plantación: ${fmtD(e.fplant)}</div>` : ""}${e.cosecha ? `<div class="muted small">Cosecha: ${fmtD(e.cosecha)}</div>` : ""}${e.ha ? `<div class="muted small">${nfmt(e.ha)} ha de esta variedad</div>` : ""}${e.nueva ? `<div class="muted small">Variedad nueva · ${esc(e.adopcion || "En evaluación")}${e.protocolo ? " · protocolo entregado" : ""}</div>` : ""}</span></li>`; }).join("");
   el.innerHTML = `
     <div class="h-row"><button class="btn ghost" data-act="go" data-v="list">← Visitas</button>
       <span>${v.ejemplo ? '<span class="ejemplo">EJEMPLO</span>' : ""}</span></div>
@@ -990,6 +990,7 @@ function renderEvalVars() {
         <div class="field"><label>Estado</label><select data-ev="${i}" data-k="estado" aria-label="Estado de ${esc(n)}"><option value="">Sin evaluar</option>${ESTADOS.map(x => `<option ${x === e.estado ? "selected" : ""}>${x}</option>`).join("")}</select></div>
         <div class="field"><label>Resultado observado</label><input type="text" data-ev="${i}" data-k="resultado" value="${esc(e.resultado || "")}" placeholder="Vigor, cuajado, calibre, rendimiento" aria-label="Resultado de ${esc(n)}"></div>
       </div>
+      <div class="field"><label>Fecha de plantación (opcional)</label><input type="date" data-ev="${i}" data-k="fplant" value="${esc(e.fplant || "")}" aria-label="Fecha de plantación de ${esc(n)}"></div>
       <div class="field"><label>Fecha de cosecha (opcional)</label><input type="date" data-ev="${i}" data-k="cosecha" value="${esc(e.cosecha || "")}" aria-label="Fecha de cosecha de ${esc(n)}"></div>
       <div class="field"><label>Superficie de esta variedad (ha, opcional)</label><input type="number" step="0.1" min="0" inputmode="decimal" data-ev="${i}" data-k="ha" value="${esc(e.ha || "")}" aria-label="Hectáreas de ${esc(n)}"></div>
       <label class="chk"><input type="checkbox" data-ev="${i}" data-k="nueva" ${e.nueva ? "checked" : ""}> Variedad nueva en evaluación</label>
@@ -1224,7 +1225,7 @@ async function saveForm() {
   const btn = $("#savebtn"); btn.disabled = true; btn.textContent = "Guardando…";
   try {
     const evalVar = {};
-    for (const n of F.variedades) { const e = F.evalVar[n]; if (e && (e.estado || e.resultado || e.nueva || e.fotoper || e.cosecha || Number(e.ha) > 0 || (e.anios || []).length)) evalVar[n] = { cosecha: e.cosecha || "", resAnio: Object.fromEntries((e.anios || []).map(a => [a, ((e.resAnio || {})[a] || "").trim()]).filter(x => x[1])), ha: Number(e.ha) > 0 ? Number(e.ha) : null, anios: (e.anios || []).slice().sort(), fotoper: e.fotoper || "", estado: e.estado || "", resultado: e.resultado || "", nueva: !!e.nueva, adopcion: e.nueva ? (e.adopcion || "En evaluación") : "", protocolo: !!e.protocolo && !!e.nueva }; }
+    for (const n of F.variedades) { const e = F.evalVar[n]; if (e && (e.estado || e.resultado || e.nueva || e.fotoper || e.cosecha || e.fplant || Number(e.ha) > 0 || (e.anios || []).length)) evalVar[n] = { cosecha: e.cosecha || "", fplant: e.fplant || "", resAnio: Object.fromEntries((e.anios || []).map(a => [a, ((e.resAnio || {})[a] || "").trim()]).filter(x => x[1])), ha: Number(e.ha) > 0 ? Number(e.ha) : null, anios: (e.anios || []).slice().sort(), fotoper: e.fotoper || "", estado: e.estado || "", resultado: e.resultado || "", nueva: !!e.nueva, adopcion: e.nueva ? (e.adopcion || "En evaluación") : "", protocolo: !!e.protocolo && !!e.nueva }; }
     const doc = {
       fecha: F.fecha, tipo: F.tipo, cliente: F.cliente, estrategico: !!F.estrategico, predio: F.predio, contacto: F.contacto, region: F.region, comuna: F.comuna,
       lat: F.lat, lng: F.lng, coordAprox: !!F.coordAprox, prec: F.coordAprox ? null : (F.prec || null), coordFuente: F.coordAprox ? "" : (F.coordFuente || ""), superficie: F.superficie === "" ? null : Number(F.superficie), plantacion: F.plantacion,
@@ -1374,7 +1375,7 @@ function cuadroGlobal(vs) {
   [...vs].sort((a, b) => a.fecha.localeCompare(b.fecha)).forEach(v => cuadroRows(v).forEach(r => M.set([r.n, r.a, v.cliente].join("|"), { ...r, cos: r.c, c: v.cliente, reg: v.region, f: v.fecha })));
   const R = [...M.values()].sort((a, b) => a.n.localeCompare(b.n, "es") || a.a.localeCompare(b.a) || a.c.localeCompare(b.c, "es"));
   if (!R.length) return "";
-  return `<h3 style="margin:14px 0 6px">Resultados observados por variedad y año de plantación</h3><div class="tbl"><table data-name="resultados-variedad-anio"><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Cliente</th><th>Región</th><th>Estado</th><th>Cosecha</th><th>Resultados observados</th><th>Visita</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${esc(r.c)}</td><td>${esc(r.reg)}</td><td>${esc(r.estado || "—")}</td><td>${r.cos ? fmtD(r.cos) : "—"}</td><td>${esc(r.res || "—")}</td><td>${r.f}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<h3 style="margin:14px 0 6px">Resultados observados por variedad y año de plantación</h3><div class="tbl"><table data-name="resultados-variedad-anio"><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Fecha de plantación</th><th>Cliente</th><th>Región</th><th>Estado</th><th>Cosecha</th><th>Resultados observados</th><th>Visita</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${r.fp ? fmtD(r.fp) : "—"}</td><td>${esc(r.c)}</td><td>${esc(r.reg)}</td><td>${esc(r.estado || "—")}</td><td>${r.cos ? fmtD(r.cos) : "—"}</td><td>${esc(r.res || "—")}</td><td>${r.f}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function repVariedad(vs) {
   const names = uniq(vs.flatMap(v => v.variedades)).sort((a, b) => a.localeCompare(b, "es"));
@@ -2276,7 +2277,7 @@ async function saveVisitsPdf(ids) {
       const vars = v.variedades || [];
       if (vars.length) {
         head("Variedades evaluadas");
-        for (const n of vars) { const e = (v.evalVar || {})[n] || {}; const meta = [e.anios && e.anios.length ? e.anios.join(" y ") + " año" : "", e.cosecha ? "cosecha " + fmtD(e.cosecha) : "", e.ha ? nfmt(e.ha) + " ha" : "", e.estado, e.nueva ? "variedad nueva" : "", e.adopcion].filter(Boolean).join(" - ");
+        for (const n of vars) { const e = (v.evalVar || {})[n] || {}; const meta = [e.anios && e.anios.length ? e.anios.join(" y ") + " año" : "", e.fplant ? "plantada " + fmtD(e.fplant) : "", e.cosecha ? "cosecha " + fmtD(e.cosecha) : "", e.ha ? nfmt(e.ha) + " ha" : "", e.estado, e.nueva ? "variedad nueva" : "", e.adopcion].filter(Boolean).join(" - ");
           para(n + (meta ? "  (" + meta + ")" : ""), { bold: true });
           const ra = (e.anios || []).slice().sort().filter(a => resAnioOf(e, a));
           ra.forEach(a => para(a + "° año: " + resAnioOf(e, a), { ind: 4, c: MUTED })); if (e.resultado) para((ra.length ? "General: " : "") + e.resultado, { ind: 4, c: MUTED }); }
