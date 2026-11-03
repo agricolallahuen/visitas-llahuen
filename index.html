@@ -494,6 +494,17 @@ const mapsLink = v => `https://www.google.com/maps?q=${v.lat},${v.lng}`;
 const wazeLink = v => `https://waze.com/ul?ll=${v.lat},${v.lng}&navigate=yes&zoom=17`;
 const gnavLink = v => `https://www.google.com/maps/dir/?api=1&destination=${v.lat},${v.lng}&travelmode=driving`;
 const navLinks = v => `<a href="${wazeLink(v)}" target="_blank" rel="noopener">Ir con Waze</a> · <a href="${gnavLink(v)}" target="_blank" rel="noopener">Ir con Google Maps</a> · <a href="${mapsLink(v)}" target="_blank" rel="noopener">Ver en mapa</a>`;
+const resAnioOf = (e, a) => ((e.resAnio || {})[a] || "").trim();
+function cuadroRows(v) {
+  const out = [];
+  for (const n of v.variedades || []) {
+    const e = (v.evalVar || {})[n] || {}, an = (e.anios || []).slice().sort();
+    if (!an.length) { if (e.resultado || e.estado) out.push({ n, a: "", estado: e.estado || "", res: e.resultado || "" }); continue; }
+    an.forEach(a => out.push({ n, a, estado: e.estado || "", res: resAnioOf(e, a) || (an.length === 1 ? (e.resultado || "") : (e.resultado ? e.resultado + " (general)" : "")) }));
+  }
+  return out;
+}
+const cuadroHtml = v => { const R = cuadroRows(v); return R.length ? `<div class="tbl"><table><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Estado</th><th>Resultados observados</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${esc(r.estado || "—")}</td><td>${esc(r.res || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""; };
 const ANIOS = ["1", "2", "3"], anioTxt = a => (a || []).slice().sort().map(x => x + "°").join(" + "), aniosVar = (v, n) => anioTxt(((v.evalVar || {})[n] || {}).anios);
 const FUENTES = { gps: "GPS en el predio", manual: "manual", foto: "GPS al tomar la foto" };
 const ico = (id, cls = "") => `<svg class="ico ${cls}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
@@ -601,7 +612,7 @@ async function localDelete(id, tomb) {
 }
 async function storeLocalPhotos(list) {
   const out = [];
-  for (const n of list) { const id = "loc-" + newId(); await IDB.put("blobs", { id, blob: n.blob }); LOCALURL[id] = URL.createObjectURL(n.blob); out.push({ id, cat: n.cat || "", variedad: n.variedad || "" }); }
+  for (const n of list) { const id = "loc-" + newId(); await IDB.put("blobs", { id, blob: n.blob }); LOCALURL[id] = URL.createObjectURL(n.blob); out.push({ id, cat: n.cat || "", variedad: n.variedad || "", desc: n.desc || "" }); }
   return out;
 }
 async function resolveLocalPhotos(fotos) {
@@ -620,7 +631,7 @@ async function saveDoc(id, doc, nuevas) {
   if (cloudOK()) {
     try {
       const fotos = await resolveLocalPhotos(doc.fotos);
-      for (const n of nuevas) { if (!S.assets) break; const up = await S.assets.upload(n.blob, { type: "image/jpeg" }); fotos.push({ id: up.id, cat: n.cat || "", variedad: n.variedad || "" }); }
+      for (const n of nuevas) { if (!S.assets) break; const up = await S.assets.upload(n.blob, { type: "image/jpeg" }); fotos.push({ id: up.id, cat: n.cat || "", variedad: n.variedad || "", desc: n.desc || "" }); }
       await S.db.collection("visitas").doc(id).set({ ...doc, fotos });
       if (S.local.some(x => x.id === id)) { await localDelete(id); recompute(); }
       return { id, mode: "cloud" };
@@ -684,7 +695,7 @@ async function exportBackup() {
   const visitas = [];
   for (const v of S.visits) {
     const fotos = [];
-    for (const f of v.fotos) { try { let data; if (isLoc(f.id)) { const rec = await IDB.get("blobs", f.id); data = rec ? await blobToDataUrl(rec.blob) : null; } else data = (await photoData(f.id)).data; if (data) fotos.push({ cat: f.cat || "", variedad: f.variedad || "", data }); } catch (e) { } }
+    for (const f of v.fotos) { try { let data; if (isLoc(f.id)) { const rec = await IDB.get("blobs", f.id); data = rec ? await blobToDataUrl(rec.blob) : null; } else data = (await photoData(f.id)).data; if (data) fotos.push({ cat: f.cat || "", variedad: f.variedad || "", desc: f.desc || "", data }); } catch (e) { } }
     const { id, _local, fotos: _f, ...doc } = v; visitas.push({ id, doc, fotos });
   }
   const json = JSON.stringify({ app: "visitas-llahuen", version: 1, exportado: new Date().toISOString(), visitas });
@@ -700,7 +711,7 @@ async function importBackup(file) {
     const ex = byId(it.id);
     if (ex && (ex.actualizado || 0) >= ((it.doc && it.doc.actualizado) || 0)) continue;
     const list = [];
-    for (const f of it.fotos || []) { try { list.push({ blob: dataUrlToBlob(f.data), cat: f.cat, variedad: f.variedad }); } catch (e) { } }
+    for (const f of it.fotos || []) { try { list.push({ blob: dataUrlToBlob(f.data), cat: f.cat, variedad: f.variedad, desc: f.desc || "" }); } catch (e) { } }
     const fotos = await storeLocalPhotos(list);
     await localSave(it.id, { ...it.doc, fotos }); n++;
   }
@@ -862,11 +873,11 @@ function renderDetail() {
     ${v.fitoDetalle || v.manejo || evs ? `<div class="panel">${h3i("Evaluación en terreno", "sprout")}
       ${v.fitoDetalle ? `<div><span class="lbl">Estado fitosanitario</span><p class="notes">${esc(v.fitoDetalle)}</p></div>` : ""}
       ${v.manejo ? `<div><span class="lbl">Manejo agronómico</span><p class="notes">${esc(v.manejo)}</p></div>` : ""}
-      ${evs ? `<div><span class="lbl">Resultados por variedad</span><ul class="dlist" style="margin-top:6px">${evs}</ul></div>` : ""}</div>` : ""}
+      ${evs ? `<div><span class="lbl">Resultados por variedad</span><ul class="dlist" style="margin-top:6px">${evs}</ul></div>` : ""}${cuadroRows(v).length ? `<div><span class="lbl">Cuadro: resultados observados por variedad y año de plantación</span><div style="margin-top:6px">${cuadroHtml(v)}</div></div>` : ""}</div>` : ""}
     ${v.destacados.length ? `<div class="panel">${h3i("Puntos destacados", "flag")}<ul class="dlist">${v.destacados.map(destHtml).join("")}</ul></div>` : ""}
     ${v.notas ? `<div class="panel">${h3i("Notas de la visita", "note")}<p class="notes">${esc(v.notas)}</p></div>` : ""}
     ${v.recomendaciones ? `<div class="panel">${h3i("Recomendaciones entregadas", "leaf")}<p class="notes">${esc(v.recomendaciones)}</p></div>` : ""}
-    ${v.fotos.length ? `<div class="panel">${h3i("Fotos", "camera", `<span class="muted small mono push">${v.fotos.length}</span>`)}<div class="photo-grid">${v.fotos.map(f => `<div class="phw"><a class="ph" data-phref="${esc(f.id)}" href="${blobUrl(f.id)}" target="_blank" rel="noopener"><img loading="lazy" alt="${esc(f.cat || "Foto de la visita")}" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"></a><span class="cat">${esc(f.cat || "Sin clasificar")}</span>${f.variedad ? `<span class="cat"><b>Variedad:</b> ${esc(f.variedad)}</span>` : ""}</div>`).join("")}</div></div>` : ""}
+    ${v.fotos.length ? `<div class="panel">${h3i("Fotos", "camera", `<span class="muted small mono push">${v.fotos.length}</span>`)}<div class="photo-grid">${v.fotos.map(f => `<div class="phw"><a class="ph" data-phref="${esc(f.id)}" href="${blobUrl(f.id)}" target="_blank" rel="noopener"><img loading="lazy" alt="${esc(f.cat || "Foto de la visita")}" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"></a><span class="cat">${esc(f.cat || "Sin clasificar")}</span>${f.variedad ? `<span class="cat"><b>Variedad:</b> ${esc(f.variedad)}</span>` : ""}${f.desc ? `<span class="cat" style="color:var(--ink)">${esc(f.desc)}</span>` : ""}</div>`).join("")}</div></div>` : ""}
     <div class="h-row">
       <button class="btn primary" data-act="edit" data-id="${v.id}">Editar</button>
       <button class="btn" data-act="again" data-id="${v.id}">Nueva visita a este cliente</button>
@@ -973,6 +984,7 @@ function renderEvalVars() {
     const ft0 = fotoper(n, F), fts = (FOTOPER.dc.concat(FOTOPER.dn).some(x => nrm(x) === nrm(n)));
     return `<div class="evcard"><b>${esc(n)} ${ft0 ? `<span class="zone-tag">${ft0}</span>` : ""}</b>
       <div class="field"><span class="lbl">Año de plantación (puedes marcar más de uno)</span><div class="chips">${ANIOS.map(a => `<button type="button" class="chip" data-act="anio" data-i="${i}" data-a="${a}" aria-pressed="${(e.anios || []).includes(a)}">${a}° año</button>`).join("")}</div></div>
+      ${(e.anios || []).length ? `<div class="field"><span class="lbl">Resultados observados por año de plantación</span>${(e.anios || []).slice().sort().map(a => `<label class="small muted" style="display:block;margin-top:4px">${a}° año</label><input type="text" data-ev="${i}" data-k="res:${a}" value="${esc(resAnioOf(e, a))}" placeholder="Vigor, cuajado, calibre, rendimiento del ${a}° año" aria-label="Resultado de ${esc(n)} ${a}° año">`).join("")}</div>` : ""}
       ${fts ? "" : `<div class="field"><label>Fotoperíodo</label><select data-ev="${i}" data-k="fotoper" aria-label="Fotoperíodo de ${esc(n)}"><option value="">Sin clasificar</option>${["Día corto", "Día neutro"].map(x => `<option ${x === e.fotoper ? "selected" : ""}>${x}</option>`).join("")}</select></div>`}
       <div class="grid2">
         <div class="field"><label>Estado</label><select data-ev="${i}" data-k="estado" aria-label="Estado de ${esc(n)}"><option value="">Sin evaluar</option>${ESTADOS.map(x => `<option ${x === e.estado ? "selected" : ""}>${x}</option>`).join("")}</select></div>
@@ -1006,8 +1018,9 @@ function renderPhotos() {
   const F = S.form, g = $("#photogrid");
   const catSel = (kind, i, cur) => `<select data-fc="${kind}" data-i="${i}" aria-label="Clasificación de la foto"><option value="">Sin clasificar</option>${FOTOCATS.map(c => `<option ${c === cur ? "selected" : ""}>${c}</option>`).join("")}</select>`;
   const varSel = (kind, i, cur) => { const L = [...F.variedades]; if (cur && !L.includes(cur)) L.push(cur); return `<select data-fv="${kind}" data-i="${i}" aria-label="Variedad de la foto"><option value="">Variedad del predio…</option>${L.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`; };
-  const old = F.fotos.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto guardada" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"><button type="button" data-act="rmfoto" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("old", i, f.cat)}${varSel("old", i, f.variedad)}</div>`).join("");
-  const nu = F.nuevas.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto nueva" src="${f.url}"><button type="button" data-act="rmnueva" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("new", i, f.cat)}${varSel("new", i, f.variedad)}</div>`).join("");
+  const descIn = (kind, i, cur) => `<input type="text" data-fd="${kind}" data-i="${i}" maxlength="200" value="${esc(cur || "")}" placeholder="Descripción de la foto (opcional)" aria-label="Descripción personalizada de la foto">`;
+  const old = F.fotos.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto guardada" data-pid="${esc(f.id)}" src="${blobUrl(f.id)}"><button type="button" data-act="rmfoto" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("old", i, f.cat)}${varSel("old", i, f.variedad)}${descIn("old", i, f.desc)}</div>`).join("");
+  const nu = F.nuevas.map((f, i) => `<div class="phw"><div class="ph"><img alt="Foto nueva" src="${f.url}"><button type="button" data-act="rmnueva" data-i="${i}" aria-label="Quitar foto">✕</button></div>${catSel("new", i, f.cat)}${varSel("new", i, f.variedad)}${descIn("new", i, f.desc)}</div>`).join("");
   const canUp = !!S.assets || !S.db;
   g.innerHTML = old + nu + (canUp ? `<label class="addph" id="cam-label">Tomar foto<input type="file" accept="image/*" capture="environment" id="f-cam"></label><label class="addph">Elegir de galería<input type="file" accept="image/*" multiple id="f-fotos"></label>` : "");
   $("#photohint").textContent = canUp ? "Clasifica cada foto (apariencia de la planta, raíces, flores, fruta, problemas, etc.) y elige su variedad entre las marcadas en esta visita para ordenarlas en los reportes. “Tomar foto” abre la cámara y “Elegir de galería” abre tu galería. Las fotos no guardan ubicación GPS; la ubicación del predio se fija con el botón GPS." : "Solo quienes pueden editar este artefacto suben fotos. Inicia sesión como propietario para agregarlas.";
@@ -1207,7 +1220,7 @@ async function saveForm() {
   const btn = $("#savebtn"); btn.disabled = true; btn.textContent = "Guardando…";
   try {
     const evalVar = {};
-    for (const n of F.variedades) { const e = F.evalVar[n]; if (e && (e.estado || e.resultado || e.nueva || e.fotoper || Number(e.ha) > 0 || (e.anios || []).length)) evalVar[n] = { ha: Number(e.ha) > 0 ? Number(e.ha) : null, anios: (e.anios || []).slice().sort(), fotoper: e.fotoper || "", estado: e.estado || "", resultado: e.resultado || "", nueva: !!e.nueva, adopcion: e.nueva ? (e.adopcion || "En evaluación") : "", protocolo: !!e.protocolo && !!e.nueva }; }
+    for (const n of F.variedades) { const e = F.evalVar[n]; if (e && (e.estado || e.resultado || e.nueva || e.fotoper || Number(e.ha) > 0 || (e.anios || []).length)) evalVar[n] = { resAnio: Object.fromEntries((e.anios || []).map(a => [a, ((e.resAnio || {})[a] || "").trim()]).filter(x => x[1])), ha: Number(e.ha) > 0 ? Number(e.ha) : null, anios: (e.anios || []).slice().sort(), fotoper: e.fotoper || "", estado: e.estado || "", resultado: e.resultado || "", nueva: !!e.nueva, adopcion: e.nueva ? (e.adopcion || "En evaluación") : "", protocolo: !!e.protocolo && !!e.nueva }; }
     const doc = {
       fecha: F.fecha, tipo: F.tipo, cliente: F.cliente, estrategico: !!F.estrategico, predio: F.predio, contacto: F.contacto, region: F.region, comuna: F.comuna,
       lat: F.lat, lng: F.lng, coordAprox: !!F.coordAprox, prec: F.coordAprox ? null : (F.prec || null), coordFuente: F.coordAprox ? "" : (F.coordFuente || ""), superficie: F.superficie === "" ? null : Number(F.superficie), plantacion: F.plantacion,
@@ -1352,6 +1365,13 @@ function repCliente(vs, cs) {
   }).join("");
   return `<div class="tbl"><table data-name="clientes"><thead><tr><th>Cliente</th><th>Visitas</th><th>Última visita</th><th>Variedades</th><th>Ha</th><th>Estado actual</th><th>Riesgos</th><th>Reclamos</th><th>Oportunid.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
+function cuadroGlobal(vs) {
+  const M = new Map();
+  [...vs].sort((a, b) => a.fecha.localeCompare(b.fecha)).forEach(v => cuadroRows(v).forEach(r => M.set([r.n, r.a, v.cliente].join("|"), { ...r, c: v.cliente, reg: v.region, f: v.fecha })));
+  const R = [...M.values()].sort((a, b) => a.n.localeCompare(b.n, "es") || a.a.localeCompare(b.a) || a.c.localeCompare(b.c, "es"));
+  if (!R.length) return "";
+  return `<h3 style="margin:14px 0 6px">Resultados observados por variedad y año de plantación</h3><div class="tbl"><table data-name="resultados-variedad-anio"><thead><tr><th>Variedad</th><th>Año de plantación</th><th>Cliente</th><th>Región</th><th>Estado</th><th>Resultados observados</th><th>Visita</th></tr></thead><tbody>${R.map(r => `<tr><td><b>${esc(r.n)}</b></td><td>${r.a ? r.a + "° año" : "—"}</td><td>${esc(r.c)}</td><td>${esc(r.reg)}</td><td>${esc(r.estado || "—")}</td><td>${esc(r.res || "—")}</td><td>${r.f}</td></tr>`).join("")}</tbody></table></div>`;
+}
 function repVariedad(vs) {
   const names = uniq(vs.flatMap(v => v.variedades)).sort((a, b) => a.localeCompare(b, "es"));
   if (!names.length) return `<p class="muted">Las visitas de este periodo no tienen variedades registradas.</p>`;
@@ -1362,6 +1382,7 @@ function repVariedad(vs) {
   }).join("");
   const ftSum = ["Día corto", "Día neutro"].map(t => { const tv = vs.filter(v => v.variedades.some(n => fotoper(n, v) === t)), tc = clientsOf(tv); return `<span><b>${tc.length}</b>clientes ${t.toLowerCase()} (${nfmt(haOf(tc))} ha)</span>`; }).join("");
   return `<div class="sumrow">${ftSum}</div><div class="tbl"><table data-name="variedades"><thead><tr><th>Variedad</th><th>Fotoperíodo</th><th>Clientes</th><th>Visitas</th><th>Ha*</th><th>Estado de la variedad</th><th>Puntaje medio</th><th>Oportunid.</th><th>Riesgos</th><th>Regiones</th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${cuadroGlobal(vs)}
   <p class="muted small" style="margin:0">El estado usa la evaluación de cada variedad y, si falta, el estado general de la visita. *Hectáreas totales del cliente que declara la variedad. Puntaje: Excelente 4, Bueno 3, Regular 2, Crítico 1.</p>`;
 }
 function adopcionRows(vs) {
@@ -2252,7 +2273,9 @@ async function saveVisitsPdf(ids) {
       if (vars.length) {
         head("Variedades evaluadas");
         for (const n of vars) { const e = (v.evalVar || {})[n] || {}; const meta = [e.anios && e.anios.length ? e.anios.join(" y ") + " año" : "", e.ha ? nfmt(e.ha) + " ha" : "", e.estado, e.nueva ? "variedad nueva" : "", e.adopcion].filter(Boolean).join(" - ");
-          para(n + (meta ? "  (" + meta + ")" : ""), { bold: true }); if (e.resultado) para(e.resultado, { ind: 4, c: MUTED }); }
+          para(n + (meta ? "  (" + meta + ")" : ""), { bold: true });
+          const ra = (e.anios || []).slice().sort().filter(a => resAnioOf(e, a));
+          ra.forEach(a => para(a + "° año: " + resAnioOf(e, a), { ind: 4, c: MUTED })); if (e.resultado) para((ra.length ? "General: " : "") + e.resultado, { ind: 4, c: MUTED }); }
       }
       const agro = v.manejo || v.notas || v.fito || v.fitoDetalle;
       if (agro) { head("Notas agronómicas");
@@ -2272,7 +2295,7 @@ async function saveVisitsPdf(ids) {
         const cw = (TW - 6) / 2, ch = 78; let col = 0, rowY = y, rowH = 0;
         for (let i = 0; i < fotos.length; i++) {
           const f = fotos[i]; let img = null; try { img = await photoData(f.id); } catch (e) { }
-          const cap = clean([f.cat || "Sin clasificar", f.variedad ? "Variedad: " + f.variedad : ""].filter(Boolean).join(" - "));
+          const cap = clean([f.cat || "Sin clasificar", f.variedad ? "Variedad: " + f.variedad : "", f.desc || ""].filter(Boolean).join(" - "));
           if (col === 0) { if (rowY + ch + 12 > H - 18) { doc.addPage(); rowY = M; } }
           const x0 = M + col * (cw + 6);
           if (img) { const k = Math.min(cw / img.w, ch / img.h), w = img.w * k, h = img.h * k; doc.addImage(img.data, "JPEG", x0 + (cw - w) / 2, rowY + (ch - h) / 2, w, h); }
@@ -2305,7 +2328,7 @@ let _dT = 0;
 async function saveDraftNow() {
   const F = S.form; if (!F || !IDB.db) return;
   try { if ($("#f-cliente")) collectForm(); } catch (e) { }
-  try { const { nuevas, ...rest } = F; await IDB.put("blobs", { id: "draft-form", form: JSON.parse(JSON.stringify(rest)), nuevas: (nuevas || []).map(n => ({ blob: n.blob, cat: n.cat || "", variedad: n.variedad || "" })), t: Date.now() }); } catch (e) { }
+  try { const { nuevas, ...rest } = F; await IDB.put("blobs", { id: "draft-form", form: JSON.parse(JSON.stringify(rest)), nuevas: (nuevas || []).map(n => ({ blob: n.blob, cat: n.cat || "", variedad: n.variedad || "", desc: n.desc || "" })), t: Date.now(), sy: Math.round(window.scrollY || 0) }); } catch (e) { }
 }
 function saveDraft() { clearTimeout(_dT); _dT = setTimeout(saveDraftNow, 700); }
 async function clearDraft() { clearTimeout(_dT); try { await IDB.del("blobs", "draft-form"); } catch (e) { } }
@@ -2314,8 +2337,9 @@ async function restoreDraft() {
   let d = null; try { d = await IDB.get("blobs", "draft-form"); } catch (e) { }
   if (!d || !d.form || !canEdit()) return;
   const f = d.form; if (!f.cliente && !(d.nuevas || []).length && !f.notas) { clearDraft(); return; }
-  S.form = blankForm({ ...f, nuevas: (d.nuevas || []).map(n => ({ blob: n.blob, url: URL.createObjectURL(n.blob), cat: n.cat, variedad: n.variedad })) });
+  S.form = blankForm({ ...f, nuevas: (d.nuevas || []).map(n => ({ blob: n.blob, url: URL.createObjectURL(n.blob), cat: n.cat, variedad: n.variedad, desc: n.desc || "" })) });
   show("form"); renderForm(); renderEtapas(); toast("Recuperé la visita que estabas llenando, con sus fotos.");
+  const y = d.sy || 0; if (y > 0) [0, 150, 500, 1200].forEach(ms => setTimeout(() => window.scrollTo(0, y), ms));
 }
 
 /* ===================== ejemplos ===================== */
@@ -2420,7 +2444,9 @@ document.addEventListener("click", async ev => {
 function setEv(t) {
   const F = S.form, n = F.variedades[+t.dataset.ev]; if (!n) return;
   const e = F.evalVar[n] || (F.evalVar[n] = {});
-  e[t.dataset.k] = t.type === "checkbox" ? t.checked : t.value;
+  const k = t.dataset.k;
+  if (k.startsWith("res:")) { (e.resAnio || (e.resAnio = {}))[k.slice(4)] = t.value; return; }
+  e[k] = t.type === "checkbox" ? t.checked : t.value;
 }
 function setDest(t) {
   const d = S.form.destacados[+t.dataset.i]; if (!d) return;
@@ -2436,6 +2462,7 @@ document.addEventListener("input", ev => {
     updateCoordHint();
   }
   else if (t.id === "f-cliente" && S.form) { if (dirRow(t.value)) applyClientDir(t.value); }
+  else if (t.dataset.fd && S.form) { const arr = t.dataset.fd === "old" ? S.form.fotos : S.form.nuevas; if (arr[+t.dataset.i]) arr[+t.dataset.i].desc = t.value; }
   else if (t.dataset.ev !== undefined && S.form) setEv(t);
   else if (t.dataset.i !== undefined && t.dataset.k && S.form && !t.dataset.gact) { if (t.tagName !== "SELECT") setDest(t); }
 });
@@ -2674,6 +2701,8 @@ async function init() {
 
 { let rt = 0; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (S.view === "report" && S.rep.tab === "graficos") paintCharts(); }, 150); });
   try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.view === "report" && S.rep.tab === "graficos") paintCharts(); }); } catch (e) { } }
+document.addEventListener("click", ev => { if (S.form && ev.target.closest && ev.target.closest("label.addph")) { clearTimeout(_dT); saveDraftNow(); } }, true);
+window.addEventListener("scroll", () => { if (S.form) { clearTimeout(window._sT); window._sT = setTimeout(saveDraftNow, 1500); } }, { passive: true });
 document.addEventListener("input", ev => { if (S.form && ev.target.closest && ev.target.closest("#v-form")) saveDraft(); });
 document.addEventListener("visibilitychange", () => { if (document.hidden && S.form) saveDraftNow(); });
 window.addEventListener("pagehide", () => { if (S.form) saveDraftNow(); });
