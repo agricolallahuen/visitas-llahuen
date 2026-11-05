@@ -66,7 +66,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 
 /* tab bar */
 .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; background: var(--surface); border-top: 1px solid var(--line); padding: 6px max(16px, env(safe-area-inset-left, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
-.tabs-in { max-width: 860px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.tabs-in { max-width: 860px; margin: 0 auto; display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; }
 .tab { border: 0; background: transparent; padding: 6px 4px; border-radius: 10px; font-weight: 600; font-size: 12.5px; color: var(--muted); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .tab[aria-current="true"] { color: var(--leaf); background: var(--leaf-soft); }
 .tab.new { background: var(--berry); color: #fff; }
@@ -252,6 +252,18 @@ svg text.mlbl { fill: var(--ink); font-family: var(--font-body); } svg text.mlbl
 .evcard { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface-2); }
 body.ro [data-act="new"], body.ro [data-act="edit"], body.ro [data-act="again"], body.ro [data-act="del"], body.ro [data-act="examples"], body.ro [data-act="delex"], body.ro [data-act="derivar"], body.ro [data-act="aviso"], body.ro [data-act="sync"], body.ro #t-form, body.ro label:has(#f-import) { display: none !important; }
 #robar { background: var(--leaf-soft, #DCEBE1); color: var(--ink, #17251D); font-size: 13px; text-align: center; padding: 6px 12px; border-bottom: 1px solid var(--line, #D2DBD1); }
+.rt-st { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.rt-st:first-of-type { border-top: 0; }
+.rt-n { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--leaf-soft); color: var(--leaf); font-weight: 700; display: grid; place-items: center; font-size: 13px; }
+.rt-start .rt-n { background: var(--berry-soft); color: var(--berry); }
+.rt-b { flex: 1; min-width: 0; }
+.rt-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.rt-sum div { background: var(--surface-2); border-radius: 10px; padding: 8px 4px; display: flex; flex-direction: column; }
+.rt-sum b { font-size: 16px; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
+a.btn.primary { color: #fff; }
+.rt-chk { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.tab { font-size: 11.5px; }
 .evsub { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
 .evsub > b { font-size: 14px; color: var(--leaf); }
 .evcard > b { font-family: var(--font-display); font-size: 16px; }
@@ -396,6 +408,7 @@ button.chip[aria-pressed="true"] .ft { color: inherit; border-color: currentColo
   <section class="view" id="v-gest" hidden></section>
   <section class="view" id="v-report" hidden></section>
   <section class="view" id="v-agenda" hidden></section>
+  <section class="view" id="v-ruta" hidden></section>
 </div>
 
 <nav class="tabs" aria-label="Secciones">
@@ -403,6 +416,7 @@ button.chip[aria-pressed="true"] .ft { color: inherit; border-color: currentColo
     <button class="tab" data-act="go" data-v="list" id="t-list"><svg class="ico"><use href="#i-book"/></svg>Visitas</button>
     <button class="tab new" data-act="new" id="t-form"><svg class="ico"><use href="#i-berry"/></svg>Nueva</button>
     <button class="tab" data-act="go" data-v="agenda" id="t-agenda"><svg class="ico"><use href="#i-cal"/></svg>Agenda</button>
+    <button class="tab" data-act="go" data-v="ruta" id="t-ruta"><svg class="ico"><use href="#i-pin"/></svg>Ruta</button>
     <button class="tab" data-act="go" data-v="gest" id="t-gest"><svg class="ico"><use href="#i-flag"/></svg>Gestión</button>
     <button class="tab" data-act="go" data-v="report" id="t-report"><svg class="ico"><use href="#i-chart"/></svg>Reportes</button>
   </div>
@@ -757,9 +771,9 @@ const anchorDL = { async save({ filename, data }) {
 /* ===================== navegación ===================== */
 function show(view) {
   S.view = view;
-  for (const k of ["list", "detail", "form", "gest", "report", "agenda"]) $("#v-" + k).hidden = k !== view;
+  for (const k of ["list", "detail", "form", "gest", "report", "agenda", "ruta"]) $("#v-" + k).hidden = k !== view;
   const tabOf = view === "detail" ? "list" : view;
-  for (const k of ["list", "form", "gest", "report", "agenda"]) $("#t-" + k).setAttribute("aria-current", k === tabOf ? "true" : "false");
+  for (const k of ["list", "form", "gest", "report", "agenda", "ruta"]) $("#t-" + k).setAttribute("aria-current", k === tabOf ? "true" : "false");
   window.scrollTo(0, 0);
   render();
 }
@@ -769,6 +783,7 @@ function render() {
   else if (S.view === "gest") renderGest();
   else if (S.view === "report") renderReport();
   else if (S.view === "agenda") renderAgenda();
+  else if (S.view === "ruta") renderRuta();
 }
 
 /* ===================== lista ===================== */
@@ -2413,6 +2428,148 @@ async function deleteExamples() {
     toast("Ejemplos eliminados");
   } catch (e) { toast("No se pudieron borrar los ejemplos."); }
 }
+
+/* ===================== ruta ===================== */
+S.rt = { stops: [], start: null, ret: false, min: 45, result: null, busy: false, msg: "", init: false };
+function rtInit() { if (S.rt.init) return; S.rt.init = true; Object.assign(S.rt, lsGet("ruta") || {}); }
+const rtSave = () => lsSet("ruta", { stops: S.rt.stops, start: S.rt.start, ret: S.rt.ret, min: S.rt.min });
+const rtRid = () => Math.random().toString(36).slice(2, 9);
+function rtLoc(txt) {
+  let t = String(txt || ""); try { t = decodeURIComponent(t); } catch (e) { }
+  t = t.replace(/[−–]/g, "-");
+  const ok = (a, b) => { a = parseFloat(a); b = parseFloat(b); return a <= -17 && a >= -57 && b <= -60 && b >= -110 ? { lat: a, lng: b } : null; };
+  let m;
+  if ((m = t.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/))) { const r = ok(m[1], m[2]); if (r) return r; }
+  if ((m = t.match(/[?&](?:q|ll|query|destination|daddr|center|sll)=\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/))) { const r = ok(m[1], m[2]); if (r) return r; }
+  if ((m = t.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/))) { const r = ok(m[1], m[2]); if (r) return r; }
+  if ((m = t.match(/(-?\d{1,2}[.,]\d{2,})\s*[,;\s]\s*(-?\d{2,3}[.,]\d{2,})/))) { const r = ok(m[1].replace(",", "."), m[2].replace(",", ".")); if (r) return r; }
+  if (/(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs|share\.google)/i.test(t)) return { short: true };
+  return null;
+}
+function rtParse(txt) {
+  const lines = String(txt || "").split(/\n+/).map(s => s.trim()).filter(Boolean), out = [], bad = [];
+  let pend = "";
+  for (const ln of lines) {
+    const loc = rtLoc(ln);
+    const label = ln.replace(/https?:\/\/\S+/g, "").replace(/^\[?[\d\/:,. ]*(a\. ?m\.|p\. ?m\.)?\]?\s*[-–]?\s*[^:]{1,40}:\s*/i, "").replace(/-?\d+[.,]\d+\s*[,;\s]\s*-?\d+[.,]\d+/g, "").replace(/[:\-–,]+$/g, "").trim();
+    if (loc && loc.short) { bad.push(ln.slice(0, 60)); pend = ""; continue; }
+    if (loc) { out.push({ id: rtRid(), name: (label || pend || "Punto " + (S.rt.stops.length + out.length + 1)).slice(0, 60), lat: loc.lat, lng: loc.lng }); pend = ""; }
+    else pend = ln.slice(0, 60);
+  }
+  return { out, bad };
+}
+const rtHav = (a, b) => { const R = 6371, r = x => x * Math.PI / 180, dl = r(b.lat - a.lat), dg = r(b.lng - a.lng), h = Math.sin(dl / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+async function rtMatrix(pts) {
+  const n = pts.length;
+  try {
+    if (n > 90 || !navigator.onLine) throw 0;
+    const c = new AbortController(), to = setTimeout(() => c.abort(), 12000);
+    const r = await fetch("https://router.project-osrm.org/table/v1/driving/" + pts.map(p => p.lng.toFixed(5) + "," + p.lat.toFixed(5)).join(";") + "?annotations=duration,distance", { signal: c.signal });
+    clearTimeout(to); const j = await r.json();
+    if (j.code !== "Ok" || !j.durations || j.durations.some(row => row.some(x => x == null))) throw 0;
+    return { T: j.durations.map(r => r.map(x => x / 60)), D: j.distances.map(r => r.map(x => x / 1000)), via: "red vial (OSRM)" };
+  } catch (e) {
+    const D = pts.map(a => pts.map(b => rtHav(a, b) * 1.35)); // factor de rodeo por caminos
+    return { T: D.map(r => r.map(x => x / 55 * 60)), D, via: "estimación en línea recta (sin conexión a la red vial)" };
+  }
+}
+function rtSolve(T, ret) { // nodo 0 = inicio fijo; devuelve orden de nodos 1..n-1
+  const n = T.length, m = n - 1; if (m <= 1) return m ? [1] : [];
+  const cost = p => { let c = T[0][p[0]]; for (let i = 1; i < p.length; i++) c += T[p[i - 1]][p[i]]; if (ret) c += T[p[p.length - 1]][0]; return c; };
+  if (m <= 12) { // exacto (Held-Karp)
+    const N = 1 << m, INF = 1e18, dp = new Float64Array(N * m).fill(INF), par = new Int8Array(N * m).fill(-1);
+    for (let j = 0; j < m; j++) dp[(1 << j) * m + j] = T[0][j + 1];
+    for (let s = 1; s < N; s++) for (let j = 0; j < m; j++) {
+      if (!(s & (1 << j))) continue; const cur = dp[s * m + j]; if (cur >= INF) continue;
+      for (let k = 0; k < m; k++) { if (s & (1 << k)) continue; const ns = s | (1 << k), v = cur + T[j + 1][k + 1]; if (v < dp[ns * m + k]) { dp[ns * m + k] = v; par[ns * m + k] = j; } }
+    }
+    let best = INF, bj = 0; for (let j = 0; j < m; j++) { const v = dp[(N - 1) * m + j] + (ret ? T[j + 1][0] : 0); if (v < best) { best = v; bj = j; } }
+    const path = []; let s = N - 1, j = bj; while (j >= 0) { path.push(j + 1); const pj = par[s * m + j]; s ^= 1 << j; j = pj; }
+    return path.reverse();
+  }
+  let best = null, bc = 1e18; // heurístico: vecino más cercano desde varios inicios + 2-opt + or-opt
+  for (let st = 0; st < Math.min(m, 8); st++) {
+    const left = new Set(Array.from({ length: m }, (_, i) => i + 1)); const p = [];
+    let cur = 0; const first = [...left].sort((a, b) => T[0][a] - T[0][b])[st]; p.push(first); left.delete(first); cur = first;
+    while (left.size) { let nb = -1, nc = 1e18; for (const k of left) if (T[cur][k] < nc) { nc = T[cur][k]; nb = k; } p.push(nb); left.delete(nb); cur = nb; }
+    let imp = true, c = cost(p);
+    while (imp) {
+      imp = false;
+      for (let i = 0; i < m - 1; i++) for (let j = i + 1; j < m; j++) { const q = p.slice(0, i).concat(p.slice(i, j + 1).reverse(), p.slice(j + 1)), qc = cost(q); if (qc < c - 1e-9) { p.splice(0, m, ...q); c = qc; imp = true; } }
+      for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) { if (i === j) continue; const q = p.slice(); const [x] = q.splice(i, 1); q.splice(j, 0, x); const qc = cost(q); if (qc < c - 1e-9) { p.splice(0, m, ...q); c = qc; imp = true; } }
+    }
+    if (c < bc) { bc = c; best = p.slice(); }
+  }
+  return best;
+}
+const rtFmt = min => { min = Math.round(min); const h = Math.floor(min / 60), m = min % 60; return h ? `${h} h ${String(m).padStart(2, "0")} min` : `${m} min`; };
+const rtGmaps = (pts, tr) => { const mode = tr || "driving", f = p => p.lat.toFixed(6) + "," + p.lng.toFixed(6); return "https://www.google.com/maps/dir/?api=1&origin=" + f(pts[0]) + "&destination=" + f(pts[pts.length - 1]) + (pts.length > 2 ? "&waypoints=" + pts.slice(1, -1).map(f).join("%7C") : "") + "&travelmode=" + mode; };
+async function rtCalc() {
+  rtInit(); const R = S.rt;
+  if (!R.start) { toast("Define primero el punto de inicio"); return; }
+  if (R.stops.length < 1) { toast("Agrega al menos un cliente"); return; }
+  R.busy = true; renderRuta();
+  const pts = [R.start, ...R.stops], mx = await rtMatrix(pts), order = rtSolve(mx.T, R.ret);
+  const seq = [0, ...order, ...(R.ret ? [0] : [])], legs = []; let tm = 0, km = 0;
+  for (let i = 1; i < seq.length; i++) { const t = mx.T[seq[i - 1]][seq[i]], d = mx.D[seq[i - 1]][seq[i]]; legs.push({ from: seq[i - 1], to: seq[i], t, d }); tm += t; km += d; }
+  const orig = [0, ...R.stops.map((_, i) => i + 1), ...(R.ret ? [0] : [])]; let om = 0, ok = 0;
+  for (let i = 1; i < orig.length; i++) { om += mx.T[orig[i - 1]][orig[i]]; ok += mx.D[orig[i - 1]][orig[i]]; }
+  R.result = { order, legs, tm, km, om, ok, via: mx.via, ts: Date.now() }; R.busy = false; renderRuta();
+}
+function rtClients() {
+  const m = new Map(); for (const v of sortedVisits()) { if (v.lat == null || v.lng == null || !v.cliente) continue; const k = norm(v.cliente); if (!m.has(k)) m.set(k, { name: v.cliente + (v.predio ? " · " + v.predio : ""), lat: Number(v.lat), lng: Number(v.lng), ap: !!v.coordAprox }); }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+function renderRuta() {
+  rtInit();
+  const el = $("#v-ruta"), R = S.rt, res = R.result, st = R.stops, cl = rtClients();
+  const startTxt = R.start ? `${esc(R.start.label || "Punto de inicio")} <span class="mono muted small">${R.start.lat.toFixed(4)}, ${R.start.lng.toFixed(4)}</span>` : `<span class="muted">Sin definir</span>`;
+  const stopsH = st.length ? st.map((s, i) => `<div class="rt-st"><span class="rt-n">${i + 1}</span><div class="rt-b"><b>${esc(s.name)}</b><div class="muted small mono">${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}</div></div><button class="btn danger" data-rt="rm" data-i="${i}" aria-label="Quitar">✕</button></div>`).join("") : `<p class="muted small" style="margin:0">Aún no hay clientes. Pega ubicaciones de WhatsApp o elige clientes ya registrados.</p>`;
+  let out = "";
+  if (res) {
+    const pts = [R.start, ...st], seqNodes = [...res.order, ...(R.ret ? [0] : [])]; let acc = 0; const clock = new Date(); const hh = x => { const d = new Date(clock.getTime() + x * 60000); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+    const rows = res.legs.map((l, i) => { acc += l.t; const p = pts[l.to], isRet = R.ret && i === res.legs.length - 1, arr = acc; const line = `<div class="rt-st"><span class="rt-n">${isRet ? "⟲" : i + 1}</span><div class="rt-b"><b>${isRet ? "Regreso al inicio" : esc(p.name)}</b><div class="muted small">${rtFmt(l.t)} · ${l.d.toFixed(1)} km desde el punto anterior · llegada ≈ ${hh(arr)}</div></div>${isRet ? "" : `<a class="btn" target="_blank" rel="noopener" href="${gnavLink(p)}">Ir</a>`}</div>`; if (!isRet) acc += Number(R.min) || 0; return line; }).join("");
+    const gain = res.om - res.tm, tot = res.tm + (Number(R.min) || 0) * res.order.length;
+    const routeP = [R.start, ...res.order.map(i => pts[i]), ...(R.ret ? [R.start] : [])], links = []; for (let i = 0; i < routeP.length - 1; i += 9) links.push(routeP.slice(i, Math.min(i + 10, routeP.length)));
+    out = `<div class="panel"><h3>Ruta recomendada</h3>
+      <div class="rt-sum"><div><b>${rtFmt(res.tm)}</b><span class="muted small">manejo</span></div><div><b>${res.km.toFixed(0)} km</b><span class="muted small">distancia</span></div><div><b>${rtFmt(tot)}</b><span class="muted small">con ${Number(R.min) || 0} min por visita</span></div></div>
+      <p class="muted small" style="margin:0">${gain > 1 ? `Ahorras ≈ ${rtFmt(gain)} y ${Math.max(0, res.ok - res.km).toFixed(0)} km respecto al orden en que agregaste los clientes.` : "El orden en que agregaste los clientes ya era prácticamente el más corto."} Cálculo con ${res.via}. Las horas de llegada parten desde ahora.</p>
+      <div class="rt-st rt-start"><span class="rt-n">★</span><div class="rt-b"><b>Inicio</b><div class="muted small">${startTxt}</div></div></div>${rows}
+      <div class="two">${links.map((L, k) => `<a class="btn primary" target="_blank" rel="noopener" href="${rtGmaps(L)}">Abrir en Google Maps${links.length > 1 ? " · tramo " + (k + 1) : ""}</a>`).join("")}</div>
+      ${links.length > 1 ? `<p class="muted small" style="margin:0">Google Maps admite hasta 10 puntos por ruta, por eso se divide en tramos consecutivos.</p>` : ""}</div>`;
+  }
+  el.innerHTML = `<div class="h-row"><h2>Programar ruta</h2><button class="btn ghost" data-rt="clear">Limpiar</button></div>
+  <div class="panel"><h3>1 · Punto de inicio</h3><div class="rt-b">${startTxt}</div>
+    <div class="two"><button class="btn primary" data-rt="gps">Usar mi ubicación actual</button></div>
+    <div class="field"><label for="rt-start">O pega una ubicación / coordenadas</label><input type="text" id="rt-start" placeholder="Ej: -34.1708, -70.7444 o enlace de Google Maps"><button class="btn" data-rt="setstart" style="margin-top:6px">Fijar como inicio</button></div></div>
+  <div class="panel"><h3>2 · Clientes a visitar <span class="muted small push">${st.length}</span></h3>${stopsH}
+    <div class="field"><label for="rt-paste">Pegar ubicación(es) de WhatsApp</label><textarea id="rt-paste" placeholder="En WhatsApp, mantén presionado el mensaje de ubicación › Copiar, y pégalo aquí. Puedes pegar varios, uno por línea; si antes de cada ubicación pones el nombre del cliente, se usará como nombre."></textarea><button class="btn primary" data-rt="add" style="margin-top:6px">Agregar a la ruta</button></div>
+    ${cl.length ? `<div class="field"><label for="rt-cl">O elegir un cliente ya registrado con ubicación</label><select id="rt-cl"><option value="">Seleccionar…</option>${cl.map((c, i) => `<option value="${i}">${esc(c.name)}${c.ap ? " (ubic. referencial)" : ""}</option>`).join("")}</select><button class="btn" data-rt="addcl" style="margin-top:6px">Agregar cliente</button></div>` : ""}</div>
+  <div class="panel"><h3>3 · Opciones</h3>
+    <label class="rt-chk"><input type="checkbox" id="rt-ret" ${R.ret ? "checked" : ""}> Volver al punto de inicio al terminar</label>
+    <div class="field"><label for="rt-min">Minutos estimados por visita</label><input type="number" id="rt-min" min="0" max="480" step="5" value="${esc(R.min)}"></div>
+    <button class="btn primary" data-rt="calc" ${R.busy ? "disabled" : ""}>${R.busy ? "Calculando…" : "Calcular mejor secuencia"}</button>
+    <p class="muted small" style="margin:0">Busca el recorrido de menor tiempo de manejo que pase por todos los clientes sin ir y volver por la misma zona. Los datos de esta pestaña se guardan solo en este dispositivo.</p></div>${out}`;
+}
+document.addEventListener("click", async ev => {
+  const t = ev.target.closest && ev.target.closest("[data-rt]"); if (!t) return;
+  rtInit(); const R = S.rt, k = t.dataset.rt;
+  if (k === "rm") { R.stops.splice(+t.dataset.i, 1); R.result = null; rtSave(); renderRuta(); }
+  else if (k === "clear") { if (confirm("¿Borrar el inicio y todos los clientes de la ruta?")) { R.stops = []; R.start = null; R.result = null; rtSave(); renderRuta(); } }
+  else if (k === "gps") {
+    if (!navigator.geolocation) { toast("Este dispositivo no permite obtener la ubicación"); return; }
+    t.disabled = true; t.textContent = "Obteniendo ubicación…";
+    navigator.geolocation.getCurrentPosition(p => { R.start = { lat: p.coords.latitude, lng: p.coords.longitude, label: "Mi ubicación actual" }; R.result = null; rtSave(); renderRuta(); }, () => { toast("No se pudo obtener la ubicación. Revisa el permiso o pega las coordenadas."); renderRuta(); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
+  }
+  else if (k === "setstart") { const v = ($("#rt-start").value || ""), l = rtLoc(v); if (!l || l.short) { toast(l && l.short ? "Ese enlace corto no trae coordenadas. Pega el pin de ubicación o las coordenadas." : "No encontré coordenadas en ese texto"); return; } R.start = { lat: l.lat, lng: l.lng, label: "Inicio" }; R.result = null; rtSave(); renderRuta(); }
+  else if (k === "add") {
+    const { out, bad } = rtParse($("#rt-paste").value); if (!out.length) { toast(bad.length ? "Los enlaces cortos (maps.app.goo.gl) no incluyen coordenadas. Comparte la ubicación como pin desde WhatsApp." : "No encontré ubicaciones en el texto pegado"); return; }
+    R.stops.push(...out); R.result = null; rtSave(); renderRuta(); toast(out.length + " cliente" + (out.length > 1 ? "s agregados" : " agregado") + (bad.length ? ` · ${bad.length} enlace corto sin coordenadas omitido` : ""));
+  }
+  else if (k === "addcl") { const i = $("#rt-cl").value; if (i === "") return; const c = rtClients()[+i]; R.stops.push({ id: rtRid(), name: c.name, lat: c.lat, lng: c.lng }); R.result = null; rtSave(); renderRuta(); }
+  else if (k === "calc") rtCalc();
+});
+document.addEventListener("change", ev => { const t = ev.target; if (t.id === "rt-ret") { S.rt.ret = t.checked; S.rt.result = null; rtSave(); renderRuta(); } else if (t.id === "rt-min") { S.rt.min = Math.max(0, Math.min(480, +t.value || 0)); rtSave(); if (S.rt.result) renderRuta(); } });
 
 /* ===================== eventos ===================== */
 let armed = null;
