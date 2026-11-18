@@ -158,15 +158,9 @@ EST_COL = {"Excelente": RGBColor(0x09, 0x62, 0x42), "Bueno": RGBColor(0x6F, 0xA8
 FONT = "Calibri"
 W, H = 13.333, 7.5
 
-# Imágenes públicas de www.llahuen.com (se descargan al generar el reporte;
-# si no hay conexión, la presentación se arma igual sin ellas).
-WIX = "https://static.wixstatic.com/media/"
-SITIO = {
-    "logo": WIX + "2b09de_adda204ea26c4ad2b5b08f9a77e18eda~mv2.png",
-    "campo": WIX + "2b09de_a594f130dbea4f06a55dfdbc357c5c83~mv2.jpg/v1/fill/w_1600,h_900,al_c,q_85/campo.jpg",
-    "plantas": WIX + "97db73_a4c8921ec8c94045880bb5c0e34ff08a~mv2_d_4272_2471_s_4_2.jpg/v1/fill/w_1600,h_925,al_c,q_85/plantas.jpg",
-    "atardecer": WIX + "97db73_419cbc40f26145a6998f877af284f4bdf002.jpg/v1/fill/w_1366,h_768,al_c,q_85/atardecer.jpg",
-}
+# Logo y fotos de www.llahuen.com guardados en reporte/assets/ (fijos en el repositorio;
+# no se descargan del sitio cada mes).
+ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 REGION_ORDEN = ["Arica y Parinacota", "Tarapacá", "Antofagasta", "Atacama", "Coquimbo", "Valparaíso",
                 "Metropolitana", "O'Higgins", "Maule", "Ñuble", "Biobío", "La Araucanía", "Los Ríos",
                 "Los Lagos", "Aysén", "Magallanes"]
@@ -178,20 +172,13 @@ ZONAS = ["Norte", "Zona Central", "Maule", "Ñuble", "Araucanía", "Sur"]
 
 
 def sitio_img(clave):
-    """Imagen de llahuen.com (o de SITIO_DIR para pruebas sin internet)."""
-    if os.environ.get("SITIO_DIR"):
-        ruta = os.path.join(os.environ["SITIO_DIR"], clave + (".png" if clave == "logo" else ".jpg"))
-        try:
-            return PILImage.open(ruta)
-        except OSError:
-            return None
+    """Imagen de marca guardada en reporte/assets (o en SITIO_DIR para pruebas)."""
+    carpeta = os.environ.get("SITIO_DIR") or ASSETS
+    ruta = os.path.join(carpeta, clave + (".png" if clave == "logo" else ".jpg"))
     try:
-        r = requests.get(SITIO[clave], timeout=25, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code == 200:
-            return PILImage.open(io.BytesIO(r.content))
-    except Exception:
-        pass
-    return None
+        return PILImage.open(ruta)
+    except OSError:
+        return None
 
 
 def logo_sitio():
