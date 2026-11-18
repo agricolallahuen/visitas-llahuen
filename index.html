@@ -1858,12 +1858,12 @@ function exportAll() {
 }
 function exportReclamos() {
   const rg = recKeys(recurrentes(reclamosOf(gAll())));
-  const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Categoría", "Reclamo", "Estado", "Coordinado con Ventas", "Resolución", "Variedad del reclamo", "Reposición solicitada", "Plantas a reponer", "Variedad a reponer", "Recurrente"];
-  saveCsv(`reclamos-llahuen-${todayISO()}.csv`, [head, ...reclamosOf(gAll()).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.categoria, x.d.texto, x.d.estado, x.d.ventas ? "Sí" : "No", x.d.resolucion, x.d.variedad || "", x.d.repo ? "Sí" : "No", x.d.repo ? (Number(x.d.repoCant) || 0) : "", x.d.repo ? (x.d.repoVar || x.d.variedad || "") : "", rg.has(x.v.id + "#" + x.i) ? "Sí" : ""])]);
+  const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Categoría", "Reclamo", "Estado", "Coordinado con Ventas", "Resolución", "Variedad del reclamo", "Reposición solicitada", "Plantas a reponer", "Variedad a reponer", "Recurrente", "Origen", "Respuesta", "Acción a tomar"];
+  saveCsv(`reclamos-llahuen-${todayISO()}.csv`, [head, ...reclamosOf(gAll()).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.categoria, x.d.texto, x.d.estado, x.d.ventas ? "Sí" : "No", x.d.resolucion, x.d.variedad || "", x.d.repo ? "Sí" : "No", x.d.repo ? (Number(x.d.repoCant) || 0) : "", x.d.repo ? (x.d.repoVar || x.d.variedad || "") : "", rg.has(x.v.id + "#" + x.i) ? "Sí" : "", x.v.caso ? "Sin visita" + (x.v.medio ? " · " + x.v.medio : "") : "Visita", x.d.respuesta || "", x.d.accion || ""])]);
 }
 function exportOport() {
-  const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Tipo", "Detalle", "Estado", "Derivada a Ventas"];
-  saveCsv(`oportunidades-llahuen-${todayISO()}.csv`, [head, ...oportOf(gAll()).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.sub, x.d.texto, x.d.estado, x.d.derivadaFecha || ""])]);
+  const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Tipo", "Detalle", "Estado", "Derivada a Ventas", "Origen", "Respuesta", "Acción a tomar"];
+  saveCsv(`oportunidades-llahuen-${todayISO()}.csv`, [head, ...oportOf(gAll()).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.sub, x.d.texto, x.d.estado, x.d.derivadaFecha || "", x.v.caso ? "Sin visita" + (x.v.medio ? " · " + x.v.medio : "") : "Visita", x.d.respuesta || "", x.d.accion || ""])]);
 }
 function exportTable() {
   const t = $("#repout table"); if (!t) { toast("Este reporte no es una tabla. Usa Copiar o Guardar."); return; }
