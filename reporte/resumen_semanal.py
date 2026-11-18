@@ -160,6 +160,28 @@ def img_flow(data_url, ancho_cm, alto_max_cm):
         return None
 
 
+VARIEDADES_BASE = ["Camarosa", "Camino Real", "Fronteras", "Adelanto", "Merced", "Belvedere", "Castaic",
+                   "San Andreas", "Albion", "Monterey", "Cabrillo", "Alturas", "Portola", "Artesia",
+                   "Carpinteria", "Sweet Carolina"]
+
+
+def variedad_oport(v, d):
+    """Variedad de la oportunidad: la marcada en la app, la(s) mencionada(s) en el detalle,
+    o las variedades de la visita."""
+    if d.get("variedad"):
+        return d["variedad"]
+    import unicodedata
+
+    def n(t):
+        return "".join(c for c in unicodedata.normalize("NFD", str(t or "").lower()) if unicodedata.category(c) != "Mn")
+    texto = n(d.get("texto"))
+    nombres = list(dict.fromkeys(VARIEDADES_BASE + list(v["variedades"])))
+    hall = [x for x in nombres if n(x) and n(x) in texto]
+    if hall:
+        return ", ".join(hall)
+    return ", ".join(v["variedades"]) or "No especificada"
+
+
 def cargar_logo():
     """Logo de Agrícola Llahuen tomado de la propia app (index.html del repositorio)."""
     import re
@@ -367,7 +389,7 @@ def construir(hoy):
         if oport:
             filas = [["Productor", "Variedad", "Tipo", "Detalle", "Estado"]]
             for v, d in oport:
-                var = d.get("variedad") or ", ".join(v["variedades"]) or "—"
+                var = variedad_oport(v, d)
                 filas.append([v.get("cliente", ""), var, d.get("sub", ""), d.get("texto", ""), d.get("estado", "")])
             el.append(tabla(filas, [3.3, 2.8, 2.8, 5.9, 2.3]))
         else:
