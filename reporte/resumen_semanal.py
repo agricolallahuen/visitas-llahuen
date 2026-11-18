@@ -166,8 +166,7 @@ VARIEDADES_BASE = ["Camarosa", "Camino Real", "Fronteras", "Adelanto", "Merced",
 
 
 def variedad_oport(v, d):
-    """Variedad de la oportunidad: la marcada en la app, la(s) mencionada(s) en el detalle,
-    o las variedades de la visita."""
+    """Variedad de la oportunidad: la marcada en la app o la(s) mencionada(s) en el detalle."""
     if d.get("variedad"):
         return d["variedad"]
     import unicodedata
@@ -179,7 +178,7 @@ def variedad_oport(v, d):
     hall = [x for x in nombres if n(x) and n(x) in texto]
     if hall:
         return ", ".join(hall)
-    return ", ".join(v["variedades"]) or "No especificada"
+    return "Sin especificar"
 
 
 def cargar_logo():
