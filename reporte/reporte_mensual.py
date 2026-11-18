@@ -26,10 +26,106 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from resumen_semanal import (  # noqa: E402
-    MESES, TZ, cargar_docs, cargar_fotos, estado_visita, migrar, variedad_oport,
-)
+import requests
+from zoneinfo import ZoneInfo
+
+# Este script es independiente del resumen semanal: no importa nada de él.
+TZ = ZoneInfo("America/Santiago")
+MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+         "septiembre", "octubre", "noviembre", "diciembre"]
+ESTADOS = ["Excelente", "Bueno", "Regular", "Crítico"]
+VARIEDADES_BASE = ["Camarosa", "Camino Real", "Fronteras", "Adelanto", "Merced", "Belvedere", "Castaic",
+                   "San Andreas", "Albion", "Monterey", "Cabrillo", "Alturas", "Portola", "Artesia",
+                   "Carpinteria", "Sweet Carolina"]
+
+
+# ----------------------------------------------------------------- datos
+def _headers():
+    key = os.environ["SUPABASE_KEY"]
+    h = {"apikey": key, "x-llahuen-key": os.environ["TEAM_CODE"], "Accept": "application/json"}
+    if key.startswith("eyJ"):
+        h["Authorization"] = "Bearer " + key
+    return h
+
+
+def _base():
+    return os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/"
+
+
+def cargar_docs():
+    if os.environ.get("DEMO_JSON"):
+        import json
+        with open(os.environ["DEMO_JSON"], encoding="utf-8") as f:
+            return json.load(f)["visitas"]
+    r = requests.get(_base() + "visitas", headers=_headers(), timeout=60,
+                     params={"select": "id,data", "order": "actualizado.desc", "limit": "5000"})
+    if r.status_code != 200:
+        sys.exit(f"Error leyendo visitas de Supabase: HTTP {r.status_code}. "
+                 "Revisa SUPABASE_URL, SUPABASE_KEY y TEAM_CODE.")
+    return [dict(d["data"] or {}, id=d["id"]) for d in r.json()]
+
+
+def cargar_fotos(ids):
+    out = {}
+    if not ids:
+        return out
+    if os.environ.get("DEMO_JSON"):
+        import json
+        with open(os.environ["DEMO_JSON"], encoding="utf-8") as f:
+            fotos = json.load(f).get("fotos", {})
+        return {i: fotos[i] for i in ids if i in fotos}
+    ids = list(ids)
+    for i in range(0, len(ids), 6):
+        parte = ids[i:i + 6]
+        try:
+            r = requests.get(_base() + "fotos", headers=_headers(), timeout=60,
+                             params={"select": "id,data", "id": "in.(" + ",".join(parte) + ")"})
+            if r.status_code == 200:
+                for row in r.json():
+                    out[row["id"]] = row["data"]
+        except requests.RequestException:
+            pass
+    return out
+
+
+def migrar(v):
+    v = dict(v)
+    dest = []
+    for x in v.get("destacados") or []:
+        x = dict(x)
+        if x.get("tipo") == "Reclamo":
+            x.setdefault("categoria", "Otro")
+            x.setdefault("estado", v.get("reclamoEstado") or "Abierto")
+        elif x.get("tipo") == "Oportunidad":
+            x.setdefault("sub", "Otra")
+            x.setdefault("estado", "Detectada")
+        dest.append(x)
+    v["destacados"] = dest
+    v["variedades"] = v.get("variedades") or []
+    v["evalVar"] = v.get("evalVar") or {}
+    v["fotos"] = v.get("fotos") or []
+    return v
+
+
+def estado_visita(v):
+    if v.get("estado") in ESTADOS:
+        return v["estado"]
+    ests = [e.get("estado") for e in v["evalVar"].values() if e.get("estado") in ESTADOS]
+    return min(ests, key=lambda s: -ESTADOS.index(s)) if ests else ""
+
+
+def variedad_oport(v, d):
+    """Variedad de la oportunidad: la marcada en la app o la(s) mencionada(s) en el detalle."""
+    if d.get("variedad"):
+        return d["variedad"]
+    import unicodedata
+
+    def n(t):
+        return "".join(c for c in unicodedata.normalize("NFD", str(t or "").lower()) if unicodedata.category(c) != "Mn")
+    texto = n(d.get("texto"))
+    nombres = list(dict.fromkeys(VARIEDADES_BASE + list(v["variedades"])))
+    hall = [x for x in nombres if n(x) and n(x) in texto]
+    return ", ".join(hall) if hall else "Sin especificar"
 
 VERDE = RGBColor(0x2A, 0x68, 0x46)
 ROJO = RGBColor(0xB1, 0x24, 0x3B)
