@@ -41,7 +41,7 @@ jobs:
 
       - name: Instalar librerías
         if: steps.hora.outputs.ok == '1'
-        run: pip install python-pptx reportlab matplotlib pillow requests
+        run: pip install python-pptx pillow requests
 
       - name: Generar y enviar la presentación
         if: steps.hora.outputs.ok == '1'
