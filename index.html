@@ -267,6 +267,9 @@ a.btn.primary { color: #fff; }
 #ac-list { position: absolute; z-index: 60; max-height: 42vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 .ac-i { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 15px; cursor: pointer; }
 .ac-i:first-child { border-top: 0; }
+.decrow { display: flex; gap: 8px; }
+.decrow input { flex: 1; min-width: 0; }
+.dotbtn { flex: none; width: 52px; font-size: 22px; font-weight: 700; padding: 0; }
 .ac-i:active { background: var(--leaf-soft); }
 .evsub { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
 .evsub > b { font-size: 14px; color: var(--leaf); }
@@ -975,7 +978,7 @@ function renderForm() {
       <div class="field"><span class="lbl">Variedades en el predio</span><div class="chips" id="varchips"></div>
         <div style="display:flex; gap:8px; margin-top:6px"><input type="text" id="f-newvar" placeholder="Otra variedad" aria-label="Agregar otra variedad"><button class="btn" data-act="addvar">Agregar</button></div></div>
       <div class="grid2">
-        <div class="field"><label for="f-sup">Superficie (ha)</label><input type="text" id="f-sup" data-dec="1" pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" autocomplete="off" value="${esc(F.superficie)}"></div>
+        <div class="field"><label for="f-sup">Superficie (ha)</label><div class="decrow"><input type="text" id="f-sup" data-dec="1" pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" autocomplete="off" value="${esc(F.superficie)}"><button type="button" class="btn dotbtn" data-dot="1" tabindex="-1" aria-label="Insertar punto decimal">.</button></div></div>
         <div class="field"><label for="f-plant">Fecha de plantación</label><input type="date" id="f-plant" value="${esc(F.plantacion)}"></div>
       </div>
       <div class="field"><label>Etapa del cultivo <span class="muted small">(puedes marcar varias)</span></label><div class="chips" id="etapachips"></div></div>
@@ -1026,7 +1029,7 @@ function renderEvalVars() {
           <div class="field"><label>Fecha de plantación</label><input type="date" data-ev="${i}" data-k="${P}fplant" value="${esc(l.fplant || "")}" aria-label="Fecha de plantación de ${esc(n)} ${lotLabel(k)}"></div>
           <div class="field"><label>Fecha de cosecha</label><input type="date" data-ev="${i}" data-k="${P}cosecha" value="${esc(l.cosecha || "")}" aria-label="Fecha de cosecha de ${esc(n)} ${lotLabel(k)}"></div>
         </div>
-        <div class="field"><label>Superficie (ha, opcional)</label><input type="text" pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" autocomplete="off" data-dec="1" data-ev="${i}" data-k="${P}ha" value="${esc(l.ha || "")}" aria-label="Hectáreas de ${esc(n)} ${lotLabel(k)}"></div>
+        <div class="field"><label>Superficie (ha, opcional)</label><div class="decrow"><input type="text" pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" autocomplete="off" data-dec="1" data-ev="${i}" data-k="${P}ha" value="${esc(l.ha || "")}" aria-label="Hectáreas de ${esc(n)} ${lotLabel(k)}"><button type="button" class="btn dotbtn" data-dot="1" tabindex="-1" aria-label="Insertar punto decimal">.</button></div></div>
       </div>`; }).join("");
     return `<div class="evcard"><b>${esc(n)} ${ft0 ? `<span class="zone-tag">${ft0}</span>` : ""}</b>
       <div class="field"><span class="lbl">Año de plantación (marca uno o varios; cada año se registra por separado)</span><div class="chips">${ANIOS.map(a => `<button type="button" class="chip" data-act="anio" data-i="${i}" data-a="${a}" aria-pressed="${(e.anios || []).includes(a)}">${a}° año</button>`).join("")}</div></div>
@@ -2594,6 +2597,13 @@ document.addEventListener("click", ev => {
   const t = ev.target; if (!(t.dataset && t.dataset.ac) && !(t.closest && t.closest("#ac-list"))) acHide();
 });
 document.addEventListener("input", ev => { const t = ev.target; if (t.dataset && t.dataset.ac) acShow(t); });
+document.addEventListener("pointerdown", ev => { if (ev.target.closest && ev.target.closest("[data-dot]")) ev.preventDefault(); });
+document.addEventListener("click", ev => {
+  const b = ev.target.closest && ev.target.closest("[data-dot]"); if (!b) return;
+  const i = b.parentElement.querySelector("input"); if (!i) return;
+  if (!i.value.includes(".")) { const a = i.selectionStart ?? i.value.length, z = i.selectionEnd ?? a; i.value = i.value.slice(0, a) + (a === 0 ? "0." : ".") + i.value.slice(z); }
+  i.dispatchEvent(new Event("input", { bubbles: true })); i.focus();
+});
 document.addEventListener("keydown", ev => { if (ev.key === "Escape" || ev.key === "Enter") acHide(); });
 
 /* ===================== eventos ===================== */
