@@ -270,6 +270,7 @@ a.btn.primary { color: #fff; }
 .decrow { display: flex; gap: 8px; }
 .decrow input { flex: 1; min-width: 0; }
 .dotbtn { flex: none; width: 52px; font-size: 22px; font-weight: 700; padding: 0; }
+.vchips { display: flex; flex-direction: column; gap: 6px; }
 .ac-i:active { background: var(--leaf-soft); }
 .evsub { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
 .evsub > b { font-size: 14px; color: var(--leaf); }
@@ -581,6 +582,7 @@ const hasReclamo = v => (v.destacados || []).some(d => d.tipo === "Reclamo");
 const estadoVar = (v, n) => ((v.evalVar || {})[n] || {}).estado || v.estado || "";
 const reclamosOf = vs => vs.flatMap(v => (v.destacados || []).map((d, i) => ({ v, i, d })).filter(x => x.d.tipo === "Reclamo"));
 const SINVAR = "Sin variedad indicada";
+const dvars = d => (d && Array.isArray(d.variedades) && d.variedades.length) ? d.variedades : (d && d.variedad ? [d.variedad] : []);
 const repoTxt = d => d && d.tipo === "Reclamo" && d.repo ? `${nfmt(Number(d.repoCant) || 0)} plantas${(d.repoVar || d.variedad) ? " de " + (d.repoVar || d.variedad) : ""}` : "";
 function haVars(c) {
   const u = c.ultima, vars = u.variedades || [], tot = Number(u.superficie) || 0, ev = u.evalVar || {}, out = {};
@@ -594,7 +596,7 @@ const oportOf = vs => vs.flatMap(v => (v.destacados || []).map((d, i) => ({ v, i
 function recurrentes(items) {
   const m = new Map();
   for (const it of items) {
-    const vars = it.d.variedad ? [it.d.variedad] : (it.v.variedades.length ? it.v.variedades : ["(sin variedad)"]);
+    const vars = dvars(it.d).length ? dvars(it.d) : (it.v.variedades.length ? it.v.variedades : ["(sin variedad)"]);
     for (const va of vars) {
       const k = (it.d.categoria || "Otro") + "|" + va;
       const g = m.get(k) || { cat: it.d.categoria || "Otro", variedad: va, items: [] };
@@ -1045,7 +1047,8 @@ function renderEvalVars() {
 function renderDest() {
   const F = S.form;
   const sel = (i, k, arr, cur, label) => `<select data-i="${i}" data-k="${k}" aria-label="${label}">${arr.map(t => `<option ${t === cur ? "selected" : ""}>${t}</option>`).join("")}</select>`;
-  const vsel = (i, k, cur, label, first) => `<select data-i="${i}" data-k="${k}" aria-label="${label}"><option value="">${first}</option>${uniq([...F.variedades, cur].filter(Boolean)).map(t => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>`;
+  const vsel = (i, k, cur, label, first) => { const d = F.destacados[i], on = dvars(d), L = uniq([...F.variedades, ...on]);
+    return `<div class="vchips" role="group" aria-label="${label}"><span class="muted small">Variedades (elige una o más):</span><div class="chips">${L.length ? L.map(n => `<button type="button" class="chip" data-dv="${i}" data-v="${esc(n)}" aria-pressed="${on.includes(n)}">${esc(n)}</button>`).join("") : '<span class="muted small">Marca primero las variedades del predio.</span>'}</div></div>`; };
   $("#destlist").innerHTML = F.destacados.map((d, i) => {
     let extra = `<div class="dextra">${vsel(i, "variedad", d.variedad || "", "Variedad del punto", "Variedad: general / sin indicar")}</div>`;
     if (d.tipo === "Reclamo") extra = `<div class="dextra">${vsel(i, "variedad", d.variedad || "", "Variedad del reclamo", "Variedad del reclamo: sin indicar")}${sel(i, "categoria", CATEGORIAS, d.categoria, "Categoría del reclamo")}${sel(i, "estado", RECLAMO_ESTADOS, d.estado, "Estado del reclamo")}
@@ -1641,9 +1644,9 @@ function chartPresets(vs) {
     for (const c of cs) { const u = c.ultima; for (const n of u.variedades || []) for (const a of ((u.evalVar || {})[n] || {}).anios || []) { (AN[n] = AN[n] || { "1": 0, "2": 0, "3": 0 })[a]++; } }
     const an = Object.keys(AN).sort(es);
     out.push({ id: "anios", title: "Variedades por año de plantación", def: "stack", types: ["stack", "vstack"], labels: an, series: ANIOS.map(a => ({ name: a + "° año", color: yc[a], values: an.map(n => AN[n][a]) })) }); }
-  { const rec = reclamosOf(vs), vk = x => x.d.variedad || SINVAR, RCC = { "Abierto": "#BE3030", "En gestión": "#B26B00", "Resuelto": "#2E7D4F" };
-    const nm = uniq(rec.map(vk)).sort((a, b) => a === SINVAR ? 1 : b === SINVAR ? -1 : es(a, b));
-    out.push({ id: "recvar", title: "Reclamos por variedad y estado", def: "stack", types: ["stack", "vstack"], labels: nm, series: RECLAMO_ESTADOS.map(e => ({ name: e, color: RCC[e], values: nm.map(n => rec.filter(x => vk(x) === n && x.d.estado === e).length) })) });
+  { const rec = reclamosOf(vs), recX = rec.flatMap(x => (dvars(x.d).length ? dvars(x.d) : [SINVAR]).map(n => ({ ...x, _k: n }))), vk = x => x._k, RCC = { "Abierto": "#BE3030", "En gestión": "#B26B00", "Resuelto": "#2E7D4F" };
+    const nm = uniq(recX.map(vk)).sort((a, b) => a === SINVAR ? 1 : b === SINVAR ? -1 : es(a, b));
+    out.push({ id: "recvar", title: "Reclamos por variedad y estado", def: "stack", types: ["stack", "vstack"], labels: nm, series: RECLAMO_ESTADOS.map(e => ({ name: e, color: RCC[e], values: nm.map(n => recX.filter(x => vk(x) === n && x.d.estado === e).length) })) });
     const rv = {}; rec.filter(x => x.d.repo).forEach(x => { const k = x.d.repoVar || x.d.variedad || SINVAR; rv[k] = (rv[k] || 0) + (Number(x.d.repoCant) || 0); });
     const rk = Object.keys(rv).sort((a, b) => rv[b] - rv[a]);
     out.push({ id: "repvar", title: "Reposiciones solicitadas por variedad (plantas)", def: "hbar", types: ["hbar", "bar", "donut"], labels: rk, series: [{ name: "Plantas", values: rk.map(k => rv[k]) }], colors: rk.map((_, i) => PAL[i % PAL.length]), unit: "plantas" }); }
@@ -1655,7 +1658,7 @@ function chartPresets(vs) {
     const ser = top.map((n, i) => ({ name: n, color: PAL[i % PAL.length], values: zl.map(z => vs.filter(v => zonaV(v) === z && v.variedades.includes(n)).length) }));
     if (oth.length) ser.push({ name: "Otras", color: "#9AA39B", values: zl.map(z => vs.filter(v => zonaV(v) === z && v.variedades.some(n => oth.includes(n))).length) });
     out.push({ id: "zonavar", title: "Visitas por zona y variedad", def: "stack", types: ["stack", "vstack"], labels: zl, series: ser, note: "Una visita se cuenta en cada variedad que tiene el predio." }); }
-  { const ds = vs.flatMap(v => (v.destacados || []).map(d => ({ v, d }))), vk = x => x.d.variedad || "General (sin variedad)", DCC = { "Positivo": "#2E7D4F", "Oportunidad": "#2C7FB8", "Riesgo": "#BE3030", "Reclamo": "#B26B00", "Recomendación": "#7A5BB5" };
+  { const ds = vs.flatMap(v => (v.destacados || []).flatMap(d => (dvars(d).length ? dvars(d) : [""]).map(n => ({ v, d, _k: n })))), vk = x => x._k || "General (sin variedad)", DCC = { "Positivo": "#2E7D4F", "Oportunidad": "#2C7FB8", "Riesgo": "#BE3030", "Reclamo": "#B26B00", "Recomendación": "#7A5BB5" };
     const nm = uniq(ds.map(vk)).sort((a, b) => a.startsWith("General") ? 1 : b.startsWith("General") ? -1 : es(a, b));
     out.push({ id: "destvar", title: "Puntos destacados por variedad y tipo", def: "stack", types: ["stack", "vstack"], labels: nm, series: TIPOS_DEST.map(t => ({ name: t, color: DCC[t], values: nm.map(n => ds.filter(x => vk(x) === n && x.d.tipo === t).length) })) }); }
   const rec = reclamosOf(vs), cats = uniq(rec.map(catOf));
@@ -1697,9 +1700,9 @@ const metricOf = (m, sub) => m === "visitas" ? sub.length : m === "clientes" ? c
 function byVariedad(vs, m) {
   const o = {}, add = (k, n) => { o[k] = (o[k] || 0) + n; };
   if (m === "ha") clientsOf(vs).forEach(c => { const h = haVars(c); for (const n in h) add(n, h[n]); });
-  else if (m === "reclamos") reclamosOf(vs).forEach(x => add(x.d.variedad || SINVAR, 1));
+  else if (m === "reclamos") reclamosOf(vs).forEach(x => (dvars(x.d).length ? dvars(x.d) : [SINVAR]).forEach(n => add(n, 1)));
   else if (m === "plantas") reclamosOf(vs).forEach(x => { if (x.d.repo) add(x.d.repoVar || x.d.variedad || SINVAR, Number(x.d.repoCant) || 0); });
-  else if (m === "puntos") vs.forEach(v => (v.destacados || []).forEach(d => add(d.variedad || SINVAR, 1)));
+  else if (m === "puntos") vs.forEach(v => (v.destacados || []).forEach(d => (dvars(d).length ? dvars(d) : [SINVAR]).forEach(n => add(n, 1))));
   else return null;
   return Object.entries(o);
 }
@@ -2627,7 +2630,7 @@ function gestRiesgos() {
   if (!all.length) return `<div class="empty">${ico("flag", "berry")}<p class="muted">No hay riesgos registrados. Aparecen los puntos destacados de tipo Riesgo de tus visitas y los casos que registres aquí.</p></div>`;
   return `<div class="dgroup">${all.map(it => { const d = it.d, cur = d.estado || "Vigente";
     return `<div class="ditem rec-item" style="--c:var(--warn)">
-      <div class="chips"><span class="pill" style="--c:var(--warn)">${esc(cur)}</span>${isEstr(it.v.cliente) ? '<span class="chip estr">Estratégico</span>' : ""}${d.variedad ? `<span class="chip">${esc(d.variedad)}</span>` : ""}</div>
+      <div class="chips"><span class="pill" style="--c:var(--warn)">${esc(cur)}</span>${isEstr(it.v.cliente) ? '<span class="chip estr">Estratégico</span>' : ""}${dvars(d).map(n => `<span class="chip">${esc(n)}</span>`).join("")}</div>
       <div>${esc(d.texto)}</div>${casoExtra(it)}
       <div class="by">${nameLink(it.v)} · ${fmtD(it.v.fecha)}${it.v.region ? " · " + esc(it.v.region) : ""}</div>
       <div class="rec-ctl"><select data-gact="dest" data-id="${it.v.id}" data-i="${it.i}" data-k="estado" aria-label="Estado">${RIESGO_ESTADOS.map(t => `<option ${t === cur ? "selected" : ""}>${t}</option>`).join("")}</select></div>
@@ -2637,13 +2640,13 @@ function casoModal(c) {
   c = c || {}; const d = (c.destacados && c.destacados[0]) || {}, ed = !!c.id;
   const opt = (L, cur) => L.map(x => `<option ${x === cur ? "selected" : ""}>${esc(x)}</option>`).join("");
   const el = document.createElement("div"); el.className = "copybox"; el.id = "cs-modal";
-  const vars = uniq([...allVarieties(), ...(d.variedad ? [d.variedad] : [])]);
+  const vars = uniq([...allVarieties(), ...dvars(d)]);
   el.innerHTML = `<div style="max-height:92vh;overflow:auto"><h3>${ed ? "Editar caso" : "Registrar caso sin visita"}</h3>
     <div class="two"><div class="field" style="flex:1;min-width:140px"><label for="cs-tipo">Tipo</label><select id="cs-tipo"><option ${d.tipo === "Reclamo" || !d.tipo ? "selected" : ""}>Reclamo</option><option ${d.tipo === "Oportunidad" ? "selected" : ""}>Oportunidad</option><option ${d.tipo === "Riesgo" ? "selected" : ""}>Riesgo</option></select></div>
     <div class="field" style="flex:1;min-width:140px"><label for="cs-fecha">Fecha en que se recibió</label><input id="cs-fecha" type="date" value="${esc(c.fecha || todayISO())}"></div></div>
     <div class="field"><label for="cs-medio">Medio de recepción</label><select id="cs-medio">${opt(MEDIOS_CASO, c.medio)}</select></div>
     <div class="field"><label for="cs-cli">Productor</label><input id="cs-cli" data-ac="1" value="${esc(c.cliente || "")}" autocomplete="off" placeholder="Toca y elige del listado, o escribe"></div>
-    <div class="field"><label for="cs-var">Variedad</label><select id="cs-var"><option value="">Sin especificar</option>${opt(vars, d.variedad)}</select></div>
+    <div class="field"><label>Variedades (elige una o más)</label><div class="chips" id="cs-vars">${vars.map(n => `<button type="button" class="chip" data-csv="1" data-v="${esc(n)}" aria-pressed="${dvars(d).includes(n)}">${esc(n)}</button>`).join("")}</div></div>
     <div class="field"><label for="cs-mot">Motivo</label><textarea id="cs-mot" rows="3" placeholder="¿Qué planteó o qué se detectó?">${esc(d.texto || "")}</textarea></div>
     <div class="field" id="cs-subw"><label for="cs-sub" id="cs-sublbl">Categoría</label><select id="cs-sub"></select></div>
     <div class="field"><label for="cs-resp">Respuesta dada al productor</label><textarea id="cs-resp" rows="2">${esc(d.respuesta || "")}</textarea></div>
@@ -2660,17 +2663,24 @@ function casoModal(c) {
 async function casoSave(id) {
   const g = x => $(x).value.trim(), cli = g("#cs-cli"), mot = g("#cs-mot"), tipo = $("#cs-tipo").value, fecha = $("#cs-fecha").value;
   if (!cli) { toast("Indica el productor."); return; } if (!mot) { toast("Escribe el motivo."); return; } if (!fecha) { toast("Elige la fecha."); return; }
-  const base = id ? byId(id) : null, bd = (base && base.destacados && base.destacados[0]) || {}, variedad = $("#cs-var").value;
+  const base = id ? byId(id) : null, bd = (base && base.destacados && base.destacados[0]) || {}, vars = [...document.querySelectorAll("#cs-vars [aria-pressed=true]")].map(b => b.dataset.v), variedad = vars.join(", ");
   const keep = bd.tipo === tipo ? bd : {};
-  let dest = { ...keep, tipo, texto: mot, variedad, respuesta: g("#cs-resp"), accion: g("#cs-acc") };
+  let dest = { ...keep, tipo, texto: mot, variedad, variedades: vars, respuesta: g("#cs-resp"), accion: g("#cs-acc") };
   if (tipo === "Reclamo") dest = { categoria: $("#cs-sub").value, estado: keep.estado || "Abierto", ventas: !!keep.ventas, resolucion: keep.resolucion || "", ...dest, categoria: $("#cs-sub").value };
   else if (tipo === "Oportunidad") dest = { estado: keep.estado || "Detectada", ...dest, sub: $("#cs-sub").value };
   else dest = { estado: keep.estado || "Vigente", ...dest };
   const prev = base ? (({ id: _i, _local, ...r }) => r)(base) : { creado: Date.now(), fotos: [], etapas: [], evalVar: {} };
-  const doc = { ...prev, caso: true, fecha, cliente: cli, medio: $("#cs-medio").value, region: prev.region || "", comuna: prev.comuna || "", variedades: variedad ? [variedad] : [], estrategico: isEstr(cli), destacados: [dest], actualizado: Date.now() };
+  const doc = { ...prev, caso: true, fecha, cliente: cli, medio: $("#cs-medio").value, region: prev.region || "", comuna: prev.comuna || "", variedades: vars, estrategico: isEstr(cli), destacados: [dest], actualizado: Date.now() };
   try { await saveDoc(id || null, doc, []); } catch (e) { toast("No se pudo guardar el caso."); return; }
   const m = $("#cs-modal"); if (m) m.remove(); recompute(); S.g.tab = tipo === "Reclamo" ? "reclamos" : tipo === "Riesgo" ? "riesgos" : "oportunidades"; renderGest(); toast("Caso guardado");
 }
+document.addEventListener("click", ev => {
+  const b = ev.target.closest && ev.target.closest("[data-dv],[data-csv]"); if (!b) return;
+  if (b.dataset.csv) { b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"); return; }
+  const d = S.form && S.form.destacados[+b.dataset.dv]; if (!d) return;
+  const cur = dvars(d).slice(), n = b.dataset.v, i = cur.indexOf(n); if (i >= 0) cur.splice(i, 1); else cur.push(n);
+  d.variedades = cur; d.variedad = cur.join(", "); b.setAttribute("aria-pressed", String(i < 0)); try { saveDraft(); } catch (e) { }
+});
 document.addEventListener("click", async ev => {
   const t = ev.target.closest && ev.target.closest("[data-cs]"); if (!t) return;
   const k = t.dataset.cs, id = t.dataset.id;
@@ -2794,7 +2804,7 @@ document.addEventListener("change", ev => {
   if (t.dataset.ev !== undefined && S.form) { setEv(t); if (t.dataset.k === "nueva") renderEvalVars(); return; }
   if (t.dataset.i !== undefined && t.dataset.k && S.form) {
     setDest(t);
-    if (t.dataset.k === "tipo") { const d = S.form.destacados[+t.dataset.i], texto = d.texto, variedad = d.variedad || ""; S.form.destacados[+t.dataset.i] = { ...newDest(d.tipo), texto, variedad }; renderDest(); }
+    if (t.dataset.k === "tipo") { const d = S.form.destacados[+t.dataset.i], texto = d.texto, variedad = d.variedad || "", variedades = dvars(d); S.form.destacados[+t.dataset.i] = { ...newDest(d.tipo), texto, variedad, variedades }; renderDest(); }
     else if (t.dataset.k === "repo") renderDest();
     return;
   }
