@@ -160,6 +160,36 @@ def img_flow(data_url, ancho_cm, alto_max_cm):
         return None
 
 
+def cargar_logo():
+    """Logo de Agrícola Llahuen tomado de la propia app (index.html del repositorio)."""
+    import re
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "index.html")
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            html = f.read()
+    except OSError:
+        return None
+    m = re.search(r'<img[^>]*\bid="logo"[^>]*>', html)
+    src = re.search(r'src="(data:image/[^"]+)"', m.group(0)) if m else None
+    if not src:
+        return None
+    try:
+        raw = base64.b64decode(src.group(1).split(",", 1)[1])
+        im = PILImage.open(io.BytesIO(raw))
+        if im.mode in ("RGBA", "LA", "P"):
+            im = im.convert("RGBA")
+            fondo = PILImage.new("RGB", im.size, "white")
+            fondo.paste(im, mask=im.split()[-1])
+            im = fondo
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        buf.seek(0)
+        alto = 2.4 * cm
+        return Image(buf, width=alto * im.width / im.height, height=alto)
+    except Exception:
+        return None
+
+
 def grafico_barras(etiquetas, valores, titulo, col=None, horizontal=False):
     alto = max(1.4, 0.32 * len(valores) + 0.7) if horizontal else 2.2
     fig, ax = plt.subplots(figsize=(5.6, alto), dpi=170)
@@ -235,9 +265,16 @@ def construir(hoy):
     riesgos = [(v, d) for v in sem for d in v["destacados"] if d.get("tipo") == "Riesgo"]
 
     # --- portada / resumen
-    el.append(Paragraph("Resumen semanal de visitas a productores", H1))
-    el.append(Paragraph(f"Agrícola Llahuen · Postventa y clientes estratégicos<br/>"
-                        f"Semana del {largo(lunes)} al {largo(domingo)} · generado el {fdate(hoy.isoformat())}", PS))
+    titulo = [Paragraph("Resumen semanal de visitas a productores", H1),
+              Paragraph(f"Agrícola Llahuen · Postventa y clientes estratégicos<br/>"
+                        f"Semana del {largo(lunes)} al {largo(domingo)} · generado el {fdate(hoy.isoformat())}", PS)]
+    logo = cargar_logo()
+    if logo is not None:
+        cab = Table([[logo, titulo]], colWidths=[logo.drawWidth + 0.5 * cm, None])
+        cab.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (0, 0), 0)]))
+        el.append(cab)
+    else:
+        el.extend(titulo)
     el.append(Spacer(1, 10))
     kpis = [(len(sem), "visitas"), (len(productores), "productores"), (len(regiones), "regiones"),
             (len(reclamos), "reclamos"), (len(oport), "oportunidades")]
@@ -284,17 +321,6 @@ def construir(hoy):
         el.append(Paragraph("Gráficos", H2))
         reg = regiones.most_common()
         el.append(grafico_barras([r for r, _ in reg], [n for _, n in reg], "Visitas por región", horizontal=True))
-        ec = Counter(estado_visita(v) for v in sem if estado_visita(v))
-        if ec:
-            labs = [e for e in ESTADOS if ec.get(e)]
-            el.append(grafico_barras(labs, [ec[e] for e in labs], "Estado de las plantas (visitas de la semana)",
-                                     col=[EST_COL[e] for e in labs]))
-        semanas = [lunes - timedelta(weeks=k) for k in range(7, -1, -1)]
-        cnt = [sum(1 for v in visitas if s.isoformat() <= str(v.get("fecha", ""))[:10] <= (s + timedelta(days=6)).isoformat())
-               for s in semanas]
-        if sum(cnt):
-            el.append(grafico_barras([f"{s.day:02d}/{s.month:02d}" for s in semanas], cnt,
-                                     "Visitas por semana (últimas 8 semanas, lunes de inicio)"))
 
         # reclamos
         el.append(Paragraph("Reclamos", H2))
@@ -339,10 +365,11 @@ def construir(hoy):
         # oportunidades
         el.append(Paragraph("Oportunidades para Ventas", H2))
         if oport:
-            filas = [["Productor", "Tipo", "Detalle", "Estado"]]
+            filas = [["Productor", "Variedad", "Tipo", "Detalle", "Estado"]]
             for v, d in oport:
-                filas.append([v.get("cliente", ""), d.get("sub", ""), d.get("texto", ""), d.get("estado", "")])
-            el.append(tabla(filas, [3.6, 3.0, 8.0, 2.5]))
+                var = d.get("variedad") or ", ".join(v["variedades"]) or "—"
+                filas.append([v.get("cliente", ""), var, d.get("sub", ""), d.get("texto", ""), d.get("estado", "")])
+            el.append(tabla(filas, [3.3, 2.8, 2.8, 5.9, 2.3]))
         else:
             el.append(Paragraph("Sin oportunidades registradas esta semana.", P))
 
