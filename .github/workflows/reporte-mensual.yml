@@ -1,0 +1,56 @@
+name: Reporte mensual de visitas
+
+on:
+  schedule:
+    # Viernes 15:00 en Chile = 18:00 UTC (verano) o 19:00 UTC (invierno).
+    # El primer paso deja seguir solo si es el último viernes del mes y la hora corresponde.
+    - cron: "0 18 * * 5"
+    - cron: "0 19 * * 5"
+  workflow_dispatch:
+    inputs:
+      mes:
+        description: "Mes a reportar (AAAA-MM). Vacío = mes en curso"
+        required: false
+        default: ""
+
+jobs:
+  reporte:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: ¿Último viernes del mes a las 15:00 en Chile?
+        id: hora
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "ok=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          OFF=$(TZ=America/Santiago date +%z)
+          SCH="${{ github.event.schedule }}"
+          MES_HOY=$(TZ=America/Santiago date +%m)
+          MES_PROX=$(TZ=America/Santiago date -d "+7 days" +%m)
+          HORA_OK=0
+          if { [ "$OFF" = "-0300" ] && [ "$SCH" = "0 18 * * 5" ]; } || { [ "$OFF" = "-0400" ] && [ "$SCH" = "0 19 * * 5" ]; }; then HORA_OK=1; fi
+          if [ "$HORA_OK" = "1" ] && [ "$MES_HOY" != "$MES_PROX" ]; then echo "ok=1" >> "$GITHUB_OUTPUT"; else echo "ok=0" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/checkout@v4
+        if: steps.hora.outputs.ok == '1'
+
+      - uses: actions/setup-python@v5
+        if: steps.hora.outputs.ok == '1'
+        with:
+          python-version: "3.12"
+
+      - name: Instalar librerías
+        if: steps.hora.outputs.ok == '1'
+        run: pip install python-pptx reportlab matplotlib pillow requests
+
+      - name: Generar y enviar la presentación
+        if: steps.hora.outputs.ok == '1'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TEAM_CODE: ${{ secrets.TEAM_CODE }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_TO_MENSUAL: postventa@llahuen.com
+          MES: ${{ github.event.inputs.mes }}
+        run: python reporte/reporte_mensual.py
