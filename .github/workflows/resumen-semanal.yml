@@ -1,0 +1,50 @@
+name: Resumen semanal de visitas
+
+on:
+  schedule:
+    # GitHub usa hora UTC. 16:00 en Chile = 19:00 UTC (horario de verano) o 20:00 UTC (invierno).
+    # Corren ambos y el primer paso deja seguir solo el que corresponde a las 16:00 de Chile.
+    - cron: "0 19 * * 5"
+    - cron: "0 20 * * 5"
+  workflow_dispatch: {}   # botón "Run workflow" para generarlo a mano
+
+jobs:
+  resumen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: ¿Son las 16:00 en Chile?
+        id: hora
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then echo "ok=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          OFF=$(TZ=America/Santiago date +%z)
+          SCH="${{ github.event.schedule }}"
+          if { [ "$OFF" = "-0300" ] && [ "$SCH" = "0 19 * * 5" ]; } || { [ "$OFF" = "-0400" ] && [ "$SCH" = "0 20 * * 5" ]; }; then
+            echo "ok=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.hora.outputs.ok == '1'
+
+      - uses: actions/setup-python@v5
+        if: steps.hora.outputs.ok == '1'
+        with:
+          python-version: "3.12"
+
+      - name: Instalar librerías
+        if: steps.hora.outputs.ok == '1'
+        run: pip install reportlab matplotlib pillow requests
+
+      - name: Generar y enviar el PDF
+        if: steps.hora.outputs.ok == '1'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TEAM_CODE: ${{ secrets.TEAM_CODE }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: python reporte/resumen_semanal.py
