@@ -264,6 +264,10 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 a.btn.primary { color: #fff; }
 .rt-chk { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .tab { font-size: 11.5px; }
+#ac-list { position: absolute; z-index: 60; max-height: 42vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.ac-i { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+.ac-i:first-child { border-top: 0; }
+.ac-i:active { background: var(--leaf-soft); }
 .evsub { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
 .evsub > b { font-size: 14px; color: var(--leaf); }
 .evcard > b { font-family: var(--font-display); font-size: 16px; }
@@ -940,7 +944,7 @@ function renderForm() {
         <div class="field"><label for="f-tipov">Tipo de visita</label><select id="f-tipov">${TIPOS_VISITA.map(t => `<option ${t === F.tipo ? "selected" : ""}>${t}</option>`).join("")}</select></div>
       </div>
       <div class="field"><label for="f-cliente">Cliente (productor)</label>
-        <input type="text" id="f-cliente" list="dl-clientes" value="${esc(F.cliente)}" autocomplete="off" placeholder="Toca y elige del listado de productores, o escribe para buscar">
+        <input type="text" id="f-cliente" data-ac="1" value="${esc(F.cliente)}" autocomplete="off" placeholder="Toca y elige del listado de productores, o escribe para buscar">
         <span class="muted small" id="clihint"></span></div>
       <label class="chk"><input type="checkbox" id="f-estr" ${F.estrategico ? "checked" : ""}> Cliente estratégico</label>
       <div class="grid2">
@@ -971,7 +975,7 @@ function renderForm() {
       <div class="field"><span class="lbl">Variedades en el predio</span><div class="chips" id="varchips"></div>
         <div style="display:flex; gap:8px; margin-top:6px"><input type="text" id="f-newvar" placeholder="Otra variedad" aria-label="Agregar otra variedad"><button class="btn" data-act="addvar">Agregar</button></div></div>
       <div class="grid2">
-        <div class="field"><label for="f-sup">Superficie (ha)</label><input type="number" id="f-sup" step="0.1" min="0" inputmode="decimal" value="${esc(F.superficie)}"></div>
+        <div class="field"><label for="f-sup">Superficie (ha)</label><input type="text" id="f-sup" data-dec="1" pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" autocomplete="off" value="${esc(F.superficie)}"></div>
         <div class="field"><label for="f-plant">Fecha de plantación</label><input type="date" id="f-plant" value="${esc(F.plantacion)}"></div>
       </div>
       <div class="field"><label>Etapa del cultivo <span class="muted small">(puedes marcar varias)</span></label><div class="chips" id="etapachips"></div></div>
@@ -1022,7 +1026,7 @@ function renderEvalVars() {
           <div class="field"><label>Fecha de plantación</label><input type="date" data-ev="${i}" data-k="${P}fplant" value="${esc(l.fplant || "")}" aria-label="Fecha de plantación de ${esc(n)} ${lotLabel(k)}"></div>
           <div class="field"><label>Fecha de cosecha</label><input type="date" data-ev="${i}" data-k="${P}cosecha" value="${esc(l.cosecha || "")}" aria-label="Fecha de cosecha de ${esc(n)} ${lotLabel(k)}"></div>
         </div>
-        <div class="field"><label>Superficie (ha, opcional)</label><input type="number" step="0.1" min="0" inputmode="decimal" data-ev="${i}" data-k="${P}ha" value="${esc(l.ha || "")}" aria-label="Hectáreas de ${esc(n)} ${lotLabel(k)}"></div>
+        <div class="field"><label>Superficie (ha, opcional)</label><input type="text" pattern="[0-9]*[.,]?[0-9]*" inputmode="decimal" autocomplete="off" data-dec="1" data-ev="${i}" data-k="${P}ha" value="${esc(l.ha || "")}" aria-label="Hectáreas de ${esc(n)} ${lotLabel(k)}"></div>
       </div>`; }).join("");
     return `<div class="evcard"><b>${esc(n)} ${ft0 ? `<span class="zone-tag">${ft0}</span>` : ""}</b>
       <div class="field"><span class="lbl">Año de plantación (marca uno o varios; cada año se registra por separado)</span><div class="chips">${ANIOS.map(a => `<button type="button" class="chip" data-act="anio" data-i="${i}" data-a="${a}" aria-pressed="${(e.anios || []).includes(a)}">${a}° año</button>`).join("")}</div></div>
@@ -1053,6 +1057,7 @@ function renderDest() {
 }
 function renderPhotos() {
   const F = S.form, g = $("#photogrid");
+  if (F.variedades.length === 1) { const v1 = F.variedades[0]; for (const f of [...F.fotos, ...F.nuevas]) if (!f.variedad) f.variedad = v1; }
   const catSel = (kind, i, cur) => `<select data-fc="${kind}" data-i="${i}" aria-label="Clasificación de la foto"><option value="">Sin clasificar</option>${FOTOCATS.map(c => `<option ${c === cur ? "selected" : ""}>${c}</option>`).join("")}</select>`;
   const varSel = (kind, i, cur) => { const L = [...F.variedades]; if (cur && !L.includes(cur)) L.push(cur); return `<select data-fv="${kind}" data-i="${i}" aria-label="Variedad de la foto"><option value="">Variedad del predio…</option>${L.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`; };
   const descIn = (kind, i, cur) => `<input type="text" data-fd="${kind}" data-i="${i}" maxlength="200" value="${esc(cur || "")}" placeholder="Descripción de la foto (opcional)" aria-label="Descripción personalizada de la foto">`;
@@ -2202,7 +2207,7 @@ function agModal(a) {
   const el = document.createElement("div"); el.className = "copybox"; el.id = "ag-modal";
   const opt = (L, cur) => L.map(x => `<option ${x === cur ? "selected" : ""}>${esc(x)}</option>`).join("");
   el.innerHTML = `<div style="max-height:92vh;overflow:auto"><h3>${ed ? "Editar visita programada" : "Programar visita"}</h3>
-    <div class="field"><label for="ag-cli">Cliente</label><input id="ag-cli" list="dl-clientes" value="${esc(a.cliente || "")}" autocomplete="off"></div>
+    <div class="field"><label for="ag-cli">Cliente</label><input id="ag-cli" data-ac="1" value="${esc(a.cliente || "")}" autocomplete="off"></div>
     <div class="field"><label for="ag-con">Nombre del contacto</label><input id="ag-con" value="${esc(a.contacto || "")}"></div>
     <div class="field"><label for="ag-tel">Teléfono</label><input id="ag-tel" type="tel" inputmode="tel" value="${esc(a.telefono || "")}" placeholder="+56 9 1234 5678"></div>
     <div class="two"><div class="field" style="flex:1;min-width:140px"><label for="ag-zona">Zona</label><select id="ag-zona"><option value="">Seleccionar…</option>${opt(ZONAS, a.zona)}</select></div>
@@ -2571,6 +2576,26 @@ document.addEventListener("click", async ev => {
 });
 document.addEventListener("change", ev => { const t = ev.target; if (t.id === "rt-ret") { S.rt.ret = t.checked; S.rt.result = null; rtSave(); renderRuta(); } else if (t.id === "rt-min") { S.rt.min = Math.max(0, Math.min(480, +t.value || 0)); rtSave(); if (S.rt.result) renderRuta(); } });
 
+/* ===== desplegable de productores (propio; <datalist> falla en iPhone) ===== */
+function acNames() { return uniq([...DIRECTORIO.rows.map(r => r[1]), ...S.visits.map(v => v.cliente)]).filter(Boolean).sort((a, b) => a.localeCompare(b, "es")); }
+function acHide() { const l = $("#ac-list"); if (l) l.remove(); }
+function acShow(inp) {
+  const q = norm(inp.value), all = acNames(), L = (q ? all.filter(n => norm(n).includes(q)) : all).slice(0, 60);
+  acHide(); if (!L.length) return;
+  const r = inp.getBoundingClientRect(), d = document.createElement("div"); d.id = "ac-list"; d.setAttribute("role", "listbox");
+  d.style.cssText = `left:${Math.round(r.left + scrollX)}px;top:${Math.round(r.bottom + scrollY + 2)}px;width:${Math.round(r.width)}px`;
+  d.innerHTML = L.map(n => `<div class="ac-i" role="option" data-v="${esc(n)}">${esc(n)}</div>`).join("");
+  d._for = inp; document.body.appendChild(d);
+}
+document.addEventListener("focusin", ev => { const t = ev.target; if (t.dataset && t.dataset.ac) acShow(t); });
+document.addEventListener("click", ev => {
+  const it = ev.target.closest && ev.target.closest(".ac-i");
+  if (it) { const l = $("#ac-list"), inp = l && l._for; if (inp) { inp.value = it.dataset.v; inp.dispatchEvent(new Event("input", { bubbles: true })); inp.dispatchEvent(new Event("change", { bubbles: true })); acHide(); inp.blur(); } return; }
+  const t = ev.target; if (!(t.dataset && t.dataset.ac) && !(t.closest && t.closest("#ac-list"))) acHide();
+});
+document.addEventListener("input", ev => { const t = ev.target; if (t.dataset && t.dataset.ac) acShow(t); });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" || ev.key === "Enter") acHide(); });
+
 /* ===================== eventos ===================== */
 let armed = null;
 document.addEventListener("click", async ev => {
@@ -2655,6 +2680,7 @@ function setDest(t) {
 }
 document.addEventListener("input", ev => {
   const t = ev.target;
+  if (t.dataset && t.dataset.dec) { const c = t.value.replace(/,/g, ".").replace(/[^0-9.]/g, "").replace(/^(\d*\.\d*)\./, "$1"); if (c !== t.value) t.value = c; }
   if (t.id === "f-q") { S.f.q = t.value; $("#cards").innerHTML = filteredVisits().map(card).join("") || `<p class="muted">Ninguna visita coincide con los filtros.</p>`; }
   else if (t.id === "f-coords" && S.form) {
     const c = parseCoords(t.value), F = S.form;
