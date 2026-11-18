@@ -250,7 +250,7 @@ svg text.mlbl { fill: var(--ink); font-family: var(--font-body); } svg text.mlbl
 .chk { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 14.5px; cursor: pointer; }
 .chk input { width: 20px; height: 20px; accent-color: var(--leaf); flex: none; }
 .evcard { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface-2); }
-body.ro [data-act="new"], body.ro [data-act="edit"], body.ro [data-act="again"], body.ro [data-act="del"], body.ro [data-act="examples"], body.ro [data-act="delex"], body.ro [data-act="derivar"], body.ro [data-act="aviso"], body.ro [data-act="sync"], body.ro #t-form, body.ro label:has(#f-import) { display: none !important; }
+body.ro [data-act="new"], body.ro [data-act="edit"], body.ro [data-act="again"], body.ro [data-act="del"], body.ro [data-act="examples"], body.ro [data-act="delex"], body.ro [data-act="derivar"], body.ro [data-act="aviso"], body.ro [data-act="sync"], body.ro [data-cs], body.ro #t-form, body.ro label:has(#f-import) { display: none !important; }
 #robar { background: var(--leaf-soft, #DCEBE1); color: var(--ink, #17251D); font-size: 13px; text-align: center; padding: 6px 12px; border-bottom: 1px solid var(--line, #D2DBD1); }
 .rt-st { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 .rt-st:first-of-type { border-top: 0; }
@@ -264,7 +264,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 a.btn.primary { color: #fff; }
 .rt-chk { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .tab { font-size: 11.5px; }
-#ac-list { position: absolute; z-index: 60; max-height: 42vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+#ac-list { position: absolute; z-index: 70; max-height: 42vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 .ac-i { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 15px; cursor: pointer; }
 .ac-i:first-child { border-top: 0; }
 .decrow { display: flex; gap: 8px; }
@@ -568,7 +568,8 @@ function migrate(d) {
   v.etapas = Array.isArray(v.etapas) && v.etapas.length ? v.etapas : (v.etapa ? String(v.etapa).split(" + ").filter(Boolean) : []); v.etapa = v.etapas.join(" + ");
   return v;
 }
-const byId = id => S.visits.find(v => v.id === id);
+const byId = id => S.visits.find(v => v.id === id) || (S.casos || []).find(v => v.id === id);
+const gAll = () => [...S.visits, ...(S.casos || [])];
 const sortedVisits = () => [...S.visits].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.creado || 0) - (a.creado || 0));
 const allVarieties = () => uniq([...VARIEDADES_BASE, ...S.visits.flatMap(v => v.variedades || [])]);
 const clientNames = () => uniq(S.visits.map(v => v.cliente)).sort((a, b) => a.localeCompare(b, "es"));
@@ -632,8 +633,8 @@ function recompute() {
   const loc = new Map(), dels = new Set();
   for (const x of S.local) (x.del ? dels.add(x.id) : loc.set(x.id, x));
   const cloud = S.cloud.filter(v => !loc.has(v.id) && !dels.has(v.id));
-  const all = [...cloud, ...[...loc.values()].map(x => x.doc.prog ? { ...x.doc, id: x.id, _local: !!S.db } : Object.assign(migrate({ ...x.doc, id: x.id }), { _local: !!S.db }))];
-  S.visits = all.filter(v => !v.prog); S.agenda = all.filter(v => v.prog);
+  const all = [...cloud, ...[...loc.values()].map(x => (x.doc.prog || x.doc.caso) ? { ...x.doc, id: x.id, _local: !!S.db } : Object.assign(migrate({ ...x.doc, id: x.id }), { _local: !!S.db }))];
+  S.visits = all.filter(v => !v.prog && !v.caso); S.agenda = all.filter(v => v.prog); S.casos = all.filter(v => v.caso);
 }
 async function localSave(id, doc) { const item = { id, doc, del: false }; S.local = S.local.filter(x => x.id !== id).concat([item]); await IDB.put("docs", item); }
 async function localDelete(id, tomb) {
@@ -828,8 +829,8 @@ function renderList() {
     return;
   }
   const t = todayISO(), lim = isoOf(new Date(Date.now() + 14 * 864e5));
-  const rec = reclamosOf(S.visits).filter(x => openRec(x.d));
-  const op = oportOf(S.visits).filter(x => x.d.estado === "Detectada");
+  const rec = reclamosOf(gAll()).filter(x => openRec(x.d));
+  const op = oportOf(gAll()).filter(x => x.d.estado === "Detectada");
   const prox = S.visits.filter(v => v.proxima && v.proxima <= lim).sort((a, b) => a.proxima.localeCompare(b.proxima));
   let strip = "";
   if (rec.length || op.length || prox.length) {
@@ -1308,11 +1309,11 @@ function avisoVentas(it) {
 }
 function renderGest() {
   const el = $("#v-gest"), G = S.g;
-  const tabs = `<div class="rtabs"><button class="chip" data-act="gtab" data-v="reclamos" aria-pressed="${G.tab === "reclamos"}">Reclamos</button><button class="chip" data-act="gtab" data-v="oportunidades" aria-pressed="${G.tab === "oportunidades"}">Oportunidades comerciales</button></div>`;
-  el.innerHTML = `<div class="h-row"><h2>Gestión</h2></div>${tabs}` + (G.tab === "reclamos" ? gestReclamos() : gestOport());
+  const tabs = `<div class="rtabs"><button class="chip" data-act="gtab" data-v="reclamos" aria-pressed="${G.tab === "reclamos"}">Reclamos</button><button class="chip" data-act="gtab" data-v="oportunidades" aria-pressed="${G.tab === "oportunidades"}">Oportunidades comerciales</button><button class="chip" data-act="gtab" data-v="riesgos" aria-pressed="${G.tab === "riesgos"}">Riesgos</button></div>`;
+  el.innerHTML = `<div class="h-row"><h2>Gestión</h2><button class="btn primary" data-cs="new">+ Registrar caso</button></div><p class="muted small" style="margin:0">Registra aquí reclamos, oportunidades o riesgos que recibiste por otro medio (WhatsApp, llamado, correo), sin necesidad de una visita.</p>${tabs}` + (G.tab === "reclamos" ? gestReclamos() : G.tab === "riesgos" ? gestRiesgos() : gestOport());
 }
 function gestReclamos() {
-  const G = S.g, all = reclamosOf(S.visits).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha));
+  const G = S.g, all = reclamosOf(gAll()).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha));
   if (!all.length) return `<div class="empty">${ico("flag", "berry")}<p class="muted">No hay reclamos registrados. Cuando agregues un punto destacado de tipo Reclamo en una visita, aparece aquí con su seguimiento hasta la resolución.</p></div>`;
   const rg = recurrentes(all), keys = recKeys(rg);
   const cnt = e => all.filter(x => x.d.estado === e).length;
@@ -1329,9 +1330,9 @@ function gestReclamos() {
       const c = d.estado === "Resuelto" ? "var(--ok)" : d.estado === "En gestión" ? "var(--warn)" : "var(--bad)";
       return `<div class="ditem rec-item" style="--c:${c}">
         <div class="chips"><span class="pill" style="--c:${c}">${esc(d.estado)}</span><span class="chip">${esc(d.categoria || "Otro")}</span>${keys.has(key) ? '<span class="recur">Recurrente</span>' : ""}${isEstr(it.v.cliente) ? '<span class="chip estr">Estratégico</span>' : ""}</div>
-        <div>${esc(d.texto)}</div>
+        <div>${esc(d.texto)}</div>${casoExtra(it)}
         ${d.variedad || d.repo ? `<div class="muted small">${d.variedad ? "Variedad: <b>" + esc(d.variedad) + "</b>" : ""}${d.repo ? `${d.variedad ? " · " : ""}<b>Reposición solicitada:</b> ${esc(repoTxt(d))}` : ""}</div>` : ""}
-        <div class="by"><button class="lnk" style="background:none;border:0;padding:0;cursor:pointer;color:var(--leaf);font-weight:600;text-decoration:underline" data-act="open" data-id="${it.v.id}">${esc(it.v.cliente)}</button> · ${esc(it.v.region)} · ${fmtD(it.v.fecha)}${it.v.variedades.length ? " · " + esc(it.v.variedades.join(", ")) : ""}</div>
+        <div class="by">${nameLink(it.v)} · ${esc(it.v.region)} · ${fmtD(it.v.fecha)}${it.v.variedades.length ? " · " + esc(it.v.variedades.join(", ")) : ""}</div>
         <div class="rec-ctl">${sel("estado", RECLAMO_ESTADOS, d.estado)}
           <label class="chk"><input type="checkbox" data-gact="dest" data-id="${it.v.id}" data-i="${it.i}" data-k="ventas" ${d.ventas ? "checked" : ""}> Coordinado con Ventas</label>
           <input type="text" data-gact="dest" data-id="${it.v.id}" data-i="${it.i}" data-k="resolucion" value="${esc(d.resolucion || "")}" placeholder="Acción o resolución" aria-label="Resolución"></div>
@@ -1339,15 +1340,15 @@ function gestReclamos() {
     }).join("") || '<p class="muted">No hay reclamos con ese filtro.</p>'}</div>`;
 }
 function gestOport() {
-  const all = oportOf(S.visits).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha));
+  const all = oportOf(gAll()).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha));
   if (!all.length) return `<div class="empty">${ico("sprout", "berry")}<p class="muted">Aún no hay oportunidades. Registra un punto destacado de tipo Oportunidad (nueva variedad, ampliación de superficie u otros productos) y derívalo a Ventas desde aquí.</p></div>`;
   const cnt = e => all.filter(x => x.d.estado === e).length;
   const groups = OPORT_ESTADOS.map(e => {
     const its = all.filter(x => x.d.estado === e); if (!its.length) return "";
     return `<h3 style="margin-top:6px">${e} <span class="muted small mono">${its.length}</span></h3>` + its.map(it => `<div class="ditem">
       <div class="chips"><span class="pill t-Oportunidad">${esc(it.d.sub || "Otra")}</span>${isEstr(it.v.cliente) ? '<span class="chip estr">Estratégico</span>' : ""}${it.d.derivadaFecha ? `<span class="muted small">derivada el ${fmtD(it.d.derivadaFecha)}</span>` : ""}</div>
-      <div>${esc(it.d.texto)}</div>
-      <div class="by"><button class="lnk" style="background:none;border:0;padding:0;cursor:pointer;color:var(--leaf);font-weight:600;text-decoration:underline" data-act="open" data-id="${it.v.id}">${esc(it.v.cliente)}</button> · ${esc(it.v.region)} · ${fmtD(it.v.fecha)}${it.v.variedades.length ? " · " + esc(it.v.variedades.join(", ")) : ""}</div>
+      <div>${esc(it.d.texto)}</div>${casoExtra(it)}
+      <div class="by">${nameLink(it.v)} · ${esc(it.v.region)} · ${fmtD(it.v.fecha)}${it.v.variedades.length ? " · " + esc(it.v.variedades.join(", ")) : ""}</div>
       <div class="rec-ctl"><select data-gact="dest" data-id="${it.v.id}" data-i="${it.i}" data-k="estado" aria-label="Estado">${OPORT_ESTADOS.map(t => `<option ${t === it.d.estado ? "selected" : ""}>${t}</option>`).join("")}</select>
         ${e === "Detectada" ? `<button class="btn primary" data-act="derivar" data-id="${it.v.id}" data-i="${it.i}">Derivar a Ventas</button>` : `<button class="btn" data-act="aviso" data-id="${it.v.id}" data-i="${it.i}">Copiar aviso</button>`}</div>
     </div>`).join("");
@@ -1856,13 +1857,13 @@ function exportAll() {
   saveCsv(`visitas-llahuen-${todayISO()}.csv`, [head, ...rows]);
 }
 function exportReclamos() {
-  const rg = recKeys(recurrentes(reclamosOf(S.visits)));
+  const rg = recKeys(recurrentes(reclamosOf(gAll())));
   const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Categoría", "Reclamo", "Estado", "Coordinado con Ventas", "Resolución", "Variedad del reclamo", "Reposición solicitada", "Plantas a reponer", "Variedad a reponer", "Recurrente"];
-  saveCsv(`reclamos-llahuen-${todayISO()}.csv`, [head, ...reclamosOf(S.visits).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.categoria, x.d.texto, x.d.estado, x.d.ventas ? "Sí" : "No", x.d.resolucion, x.d.variedad || "", x.d.repo ? "Sí" : "No", x.d.repo ? (Number(x.d.repoCant) || 0) : "", x.d.repo ? (x.d.repoVar || x.d.variedad || "") : "", rg.has(x.v.id + "#" + x.i) ? "Sí" : ""])]);
+  saveCsv(`reclamos-llahuen-${todayISO()}.csv`, [head, ...reclamosOf(gAll()).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.categoria, x.d.texto, x.d.estado, x.d.ventas ? "Sí" : "No", x.d.resolucion, x.d.variedad || "", x.d.repo ? "Sí" : "No", x.d.repo ? (Number(x.d.repoCant) || 0) : "", x.d.repo ? (x.d.repoVar || x.d.variedad || "") : "", rg.has(x.v.id + "#" + x.i) ? "Sí" : ""])]);
 }
 function exportOport() {
   const head = ["Fecha", "Cliente", "Estratégico", "Zona", "Región", "Variedades", "Tipo", "Detalle", "Estado", "Derivada a Ventas"];
-  saveCsv(`oportunidades-llahuen-${todayISO()}.csv`, [head, ...oportOf(S.visits).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.sub, x.d.texto, x.d.estado, x.d.derivadaFecha || ""])]);
+  saveCsv(`oportunidades-llahuen-${todayISO()}.csv`, [head, ...oportOf(gAll()).sort((a, b) => b.v.fecha.localeCompare(a.v.fecha)).map(x => [x.v.fecha, x.v.cliente, isEstr(x.v.cliente) ? "Sí" : "", zonaV(x.v), x.v.region, x.v.variedades.join(", "), x.d.sub, x.d.texto, x.d.estado, x.d.derivadaFecha || ""])]);
 }
 function exportTable() {
   const t = $("#repout table"); if (!t) { toast("Este reporte no es una tabla. Usa Copiar o Guardar."); return; }
@@ -2536,13 +2537,15 @@ function renderRuta() {
   let out = "";
   if (res) {
     const pts = [R.start, ...st], seqNodes = [...res.order, ...(R.ret ? [0] : [])]; let acc = 0; const clock = new Date(); const hh = x => { const d = new Date(clock.getTime() + x * 60000); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
-    const rows = res.legs.map((l, i) => { acc += l.t; const p = pts[l.to], isRet = R.ret && i === res.legs.length - 1, arr = acc; const line = `<div class="rt-st"><span class="rt-n">${isRet ? "⟲" : i + 1}</span><div class="rt-b"><b>${isRet ? "Regreso al inicio" : esc(p.name)}</b><div class="muted small">${rtFmt(l.t)} · ${l.d.toFixed(1)} km desde el punto anterior · llegada ≈ ${hh(arr)}</div></div>${isRet ? "" : `<a class="btn" target="_blank" rel="noopener" href="${gnavLink(p)}">Ir</a>`}</div>`; if (!isRet) acc += Number(R.min) || 0; return line; }).join("");
+    const rows = res.legs.map((l, i) => { acc += l.t; const p = pts[l.to], isRet = R.ret && i === res.legs.length - 1, arr = acc; const line = `<div class="rt-st"><span class="rt-n">${isRet ? "⟲" : i + 1}</span><div class="rt-b"><b>${isRet ? "Regreso al inicio" : esc(p.name)}</b><div class="muted small">${rtFmt(l.t)} · ${l.d.toFixed(1)} km desde el punto anterior · llegada ≈ ${hh(arr)}</div></div>${isRet ? "" : `<div class="two" style="flex:none;flex-wrap:nowrap"><a class="btn" target="_blank" rel="noopener" href="${gnavLink(p)}">Maps</a><a class="btn" target="_blank" rel="noopener" href="${wazeLink(p)}">Waze</a></div>`}</div>`; if (!isRet) acc += Number(R.min) || 0; return line; }).join("");
     const gain = res.om - res.tm, tot = res.tm + (Number(R.min) || 0) * res.order.length;
     const routeP = [R.start, ...res.order.map(i => pts[i]), ...(R.ret ? [R.start] : [])], links = []; for (let i = 0; i < routeP.length - 1; i += 9) links.push(routeP.slice(i, Math.min(i + 10, routeP.length)));
     out = `<div class="panel"><h3>Ruta recomendada</h3>
       <div class="rt-sum"><div><b>${rtFmt(res.tm)}</b><span class="muted small">manejo</span></div><div><b>${res.km.toFixed(0)} km</b><span class="muted small">distancia</span></div><div><b>${rtFmt(tot)}</b><span class="muted small">con ${Number(R.min) || 0} min por visita</span></div></div>
       <p class="muted small" style="margin:0">${gain > 1 ? `Ahorras ≈ ${rtFmt(gain)} y ${Math.max(0, res.ok - res.km).toFixed(0)} km respecto al orden en que agregaste los clientes.` : "El orden en que agregaste los clientes ya era prácticamente el más corto."} Cálculo con ${res.via}. Las horas de llegada parten desde ahora.</p>
       <div class="rt-st rt-start"><span class="rt-n">★</span><div class="rt-b"><b>Inicio</b><div class="muted small">${startTxt}</div></div></div>${rows}
+      <div class="two"><a class="btn" target="_blank" rel="noopener" href="${wazeLink(pts[res.order[0]])}">Iniciar en Waze (1.ª parada)</a></div>
+      <p class="muted small" style="margin:0">Waze admite un solo destino por vez: usa el botón Waze de cada parada, siguiendo el orden de la lista.</p>
       <div class="two">${links.map((L, k) => `<a class="btn primary" target="_blank" rel="noopener" href="${rtGmaps(L)}">Abrir en Google Maps${links.length > 1 ? " · tramo " + (k + 1) : ""}</a>`).join("")}</div>
       ${links.length > 1 ? `<p class="muted small" style="margin:0">Google Maps admite hasta 10 puntos por ruta, por eso se divide en tramos consecutivos.</p>` : ""}</div>`;
   }
@@ -2605,6 +2608,78 @@ document.addEventListener("click", ev => {
   i.dispatchEvent(new Event("input", { bubbles: true })); i.focus();
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Escape" || ev.key === "Enter") acHide(); });
+
+
+/* ===== casos recibidos por otro medio (sin visita) ===== */
+const MEDIOS_CASO = ["WhatsApp", "Llamado telefónico", "Correo", "Presencial / otro"];
+const RIESGO_ESTADOS = ["Vigente", "En seguimiento", "Controlado"];
+function nameLink(v) {
+  if (v.caso) return `<b>${esc(v.cliente)}</b> <span class="chip">Sin visita${v.medio ? " · " + esc(v.medio) : ""}</span>`;
+  return `<button class="lnk" style="background:none;border:0;padding:0;cursor:pointer;color:var(--leaf);font-weight:600;text-decoration:underline" data-act="open" data-id="${v.id}">${esc(v.cliente)}</button>`;
+}
+function casoExtra(it) {
+  const d = it.d, v = it.v; if (!v.caso) return "";
+  return `${d.variedad ? "" : ""}${d.respuesta ? `<div class="small"><b>Respuesta:</b> ${esc(d.respuesta)}</div>` : ""}${d.accion ? `<div class="small"><b>Acción a tomar:</b> ${esc(d.accion)}</div>` : ""}
+    <div class="two"><button class="btn" data-cs="edit" data-id="${v.id}">Editar caso</button><button class="btn danger" data-cs="del" data-id="${v.id}">Eliminar</button></div>`;
+}
+function gestRiesgos() {
+  const all = gAll().flatMap(v => (v.destacados || []).map((d, i) => ({ v, i, d })).filter(x => x.d.tipo === "Riesgo")).sort((a, b) => (b.v.fecha || "").localeCompare(a.v.fecha || ""));
+  if (!all.length) return `<div class="empty">${ico("flag", "berry")}<p class="muted">No hay riesgos registrados. Aparecen los puntos destacados de tipo Riesgo de tus visitas y los casos que registres aquí.</p></div>`;
+  return `<div class="dgroup">${all.map(it => { const d = it.d, cur = d.estado || "Vigente";
+    return `<div class="ditem rec-item" style="--c:var(--warn)">
+      <div class="chips"><span class="pill" style="--c:var(--warn)">${esc(cur)}</span>${isEstr(it.v.cliente) ? '<span class="chip estr">Estratégico</span>' : ""}${d.variedad ? `<span class="chip">${esc(d.variedad)}</span>` : ""}</div>
+      <div>${esc(d.texto)}</div>${casoExtra(it)}
+      <div class="by">${nameLink(it.v)} · ${fmtD(it.v.fecha)}${it.v.region ? " · " + esc(it.v.region) : ""}</div>
+      <div class="rec-ctl"><select data-gact="dest" data-id="${it.v.id}" data-i="${it.i}" data-k="estado" aria-label="Estado">${RIESGO_ESTADOS.map(t => `<option ${t === cur ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+    </div>`; }).join("")}</div>`;
+}
+function casoModal(c) {
+  c = c || {}; const d = (c.destacados && c.destacados[0]) || {}, ed = !!c.id;
+  const opt = (L, cur) => L.map(x => `<option ${x === cur ? "selected" : ""}>${esc(x)}</option>`).join("");
+  const el = document.createElement("div"); el.className = "copybox"; el.id = "cs-modal";
+  const vars = uniq([...allVarieties(), ...(d.variedad ? [d.variedad] : [])]);
+  el.innerHTML = `<div style="max-height:92vh;overflow:auto"><h3>${ed ? "Editar caso" : "Registrar caso sin visita"}</h3>
+    <div class="two"><div class="field" style="flex:1;min-width:140px"><label for="cs-tipo">Tipo</label><select id="cs-tipo"><option ${d.tipo === "Reclamo" || !d.tipo ? "selected" : ""}>Reclamo</option><option ${d.tipo === "Oportunidad" ? "selected" : ""}>Oportunidad</option><option ${d.tipo === "Riesgo" ? "selected" : ""}>Riesgo</option></select></div>
+    <div class="field" style="flex:1;min-width:140px"><label for="cs-fecha">Fecha en que se recibió</label><input id="cs-fecha" type="date" value="${esc(c.fecha || todayISO())}"></div></div>
+    <div class="field"><label for="cs-medio">Medio de recepción</label><select id="cs-medio">${opt(MEDIOS_CASO, c.medio)}</select></div>
+    <div class="field"><label for="cs-cli">Productor</label><input id="cs-cli" data-ac="1" value="${esc(c.cliente || "")}" autocomplete="off" placeholder="Toca y elige del listado, o escribe"></div>
+    <div class="field"><label for="cs-var">Variedad</label><select id="cs-var"><option value="">Sin especificar</option>${opt(vars, d.variedad)}</select></div>
+    <div class="field"><label for="cs-mot">Motivo</label><textarea id="cs-mot" rows="3" placeholder="¿Qué planteó o qué se detectó?">${esc(d.texto || "")}</textarea></div>
+    <div class="field" id="cs-subw"><label for="cs-sub" id="cs-sublbl">Categoría</label><select id="cs-sub"></select></div>
+    <div class="field"><label for="cs-resp">Respuesta dada al productor</label><textarea id="cs-resp" rows="2">${esc(d.respuesta || "")}</textarea></div>
+    <div class="field"><label for="cs-acc">Acción a tomar</label><textarea id="cs-acc" rows="2">${esc(d.accion || "")}</textarea></div>
+    <div class="two"><button class="btn primary" data-cs="save" data-id="${c.id || ""}">Guardar</button><button class="btn ghost" data-cs="close">Cancelar</button></div></div>`;
+  document.body.appendChild(el);
+  const sync = () => { const t = $("#cs-tipo").value, w = $("#cs-subw"), sel = $("#cs-sub");
+    if (t === "Riesgo") { w.hidden = true; return; } w.hidden = false;
+    const L = t === "Reclamo" ? CATEGORIAS : SUBS, cur = t === "Reclamo" ? d.categoria : d.sub;
+    $("#cs-sublbl").textContent = t === "Reclamo" ? "Categoría del reclamo" : "Tipo de oportunidad"; sel.innerHTML = opt(L, cur); };
+  $("#cs-tipo").addEventListener("change", sync); sync();
+  return el;
+}
+async function casoSave(id) {
+  const g = x => $(x).value.trim(), cli = g("#cs-cli"), mot = g("#cs-mot"), tipo = $("#cs-tipo").value, fecha = $("#cs-fecha").value;
+  if (!cli) { toast("Indica el productor."); return; } if (!mot) { toast("Escribe el motivo."); return; } if (!fecha) { toast("Elige la fecha."); return; }
+  const base = id ? byId(id) : null, bd = (base && base.destacados && base.destacados[0]) || {}, variedad = $("#cs-var").value;
+  const keep = bd.tipo === tipo ? bd : {};
+  let dest = { ...keep, tipo, texto: mot, variedad, respuesta: g("#cs-resp"), accion: g("#cs-acc") };
+  if (tipo === "Reclamo") dest = { categoria: $("#cs-sub").value, estado: keep.estado || "Abierto", ventas: !!keep.ventas, resolucion: keep.resolucion || "", ...dest, categoria: $("#cs-sub").value };
+  else if (tipo === "Oportunidad") dest = { estado: keep.estado || "Detectada", ...dest, sub: $("#cs-sub").value };
+  else dest = { estado: keep.estado || "Vigente", ...dest };
+  const prev = base ? (({ id: _i, _local, ...r }) => r)(base) : { creado: Date.now(), fotos: [], etapas: [], evalVar: {} };
+  const doc = { ...prev, caso: true, fecha, cliente: cli, medio: $("#cs-medio").value, region: prev.region || "", comuna: prev.comuna || "", variedades: variedad ? [variedad] : [], estrategico: isEstr(cli), destacados: [dest], actualizado: Date.now() };
+  try { await saveDoc(id || null, doc, []); } catch (e) { toast("No se pudo guardar el caso."); return; }
+  const m = $("#cs-modal"); if (m) m.remove(); recompute(); S.g.tab = tipo === "Reclamo" ? "reclamos" : tipo === "Riesgo" ? "riesgos" : "oportunidades"; renderGest(); toast("Caso guardado");
+}
+document.addEventListener("click", async ev => {
+  const t = ev.target.closest && ev.target.closest("[data-cs]"); if (!t) return;
+  const k = t.dataset.cs, id = t.dataset.id;
+  if (k === "new") { if (!canEdit()) { toast("Tu cuenta es de solo lectura."); return; } casoModal(); }
+  else if (k === "edit") { const c = byId(id); if (c) casoModal(c); }
+  else if (k === "close") { const m = $("#cs-modal"); if (m) m.remove(); }
+  else if (k === "save") casoSave(id || null);
+  else if (k === "del") { const c = byId(id); if (c && confirm("¿Eliminar este caso? No se puede deshacer.")) { try { await deleteVisit(c); } catch (e) { toast("No se pudo eliminar."); return; } renderGest(); toast("Caso eliminado"); } }
+});
 
 /* ===================== eventos ===================== */
 let armed = null;
@@ -2923,7 +2998,7 @@ async function init() {
   if (S.db) {
     setSync("on", TEAM ? "datos del equipo" : "guardado en la nube");
     S.db.collection("visitas").onSnapshot(snap => {
-      S.cloud = snap.docs.map(d => { const x = { id: d.id, ...d.data() }; return x.prog ? x : migrate(x); }); S.loaded = true;
+      S.cloud = snap.docs.map(d => { const x = { id: d.id, ...d.data() }; return (x.prog || x.caso) ? x : migrate(x); }); S.loaded = true;
       recompute(); rebuildClientList(); updateSync();
       if (S.view !== "form") render();
     }, err => { S.loaded = true; recompute(); setSync("off", "sin acceso a los datos"); render(); });
