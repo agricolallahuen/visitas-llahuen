@@ -250,7 +250,7 @@ svg text.mlbl { fill: var(--ink); font-family: var(--font-body); } svg text.mlbl
 .chk { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 14.5px; cursor: pointer; }
 .chk input { width: 20px; height: 20px; accent-color: var(--leaf); flex: none; }
 .evcard { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface-2); }
-body.ro [data-act="new"], body.ro [data-act="edit"], body.ro [data-act="again"], body.ro [data-act="del"], body.ro [data-act="examples"], body.ro [data-act="delex"], body.ro [data-act="derivar"], body.ro [data-act="aviso"], body.ro [data-act="sync"], body.ro [data-cs], body.ro #t-form, body.ro label:has(#f-import) { display: none !important; }
+body.ro [data-act="new"], body.ro [data-act="edit"], body.ro [data-act="again"], body.ro [data-act="del"], body.ro [data-act="examples"], body.ro [data-act="delex"], body.ro [data-act="derivar"], body.ro [data-act="aviso"], body.ro [data-act="sync"], body.ro [data-cs], body.ro [data-vz="open"], body.ro #t-form, body.ro label:has(#f-import) { display: none !important; }
 #robar { background: var(--leaf-soft, #DCEBE1); color: var(--ink, #17251D); font-size: 13px; text-align: center; padding: 6px 12px; border-bottom: 1px solid var(--line, #D2DBD1); }
 .rt-st { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 .rt-st:first-of-type { border-top: 0; }
@@ -264,7 +264,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 a.btn.primary { color: #fff; }
 .rt-chk { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .tab { font-size: 11.5px; }
-#ac-list { position: absolute; z-index: 70; max-height: 42vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+#ac-list { position: absolute; z-index: 80; max-height: 42vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 .ac-i { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 15px; cursor: pointer; }
 .ac-i:first-child { border-top: 0; }
 .decrow { display: flex; gap: 8px; }
@@ -820,7 +820,7 @@ const emptyArt = `<svg class="art" viewBox="0 0 240 150" aria-hidden="true">
   <use href="#i-leaf" x="130" y="22" width="40" height="40" transform="rotate(24 150 42)"/></svg>`;
 function renderList() {
   const el = $("#v-list");
-  const head = `<div class="h-row"><h2>Visitas</h2><span class="muted small mono">${S.visits.length} registradas</span></div>`;
+  const head = `<div class="h-row"><h2>Visitas</h2><button class="btn" data-vz="open">🎤 Por voz</button><span class="muted small mono">${S.visits.length} registradas</span></div>`;
   if (!S.visits.length) {
     el.innerHTML = head + `<div class="empty">${emptyArt}
       <h3>${S.loaded ? "Aún no hay visitas registradas" : "Cargando visitas…"}</h3>
@@ -943,6 +943,7 @@ function renderForm() {
   const coordTxt = F.lat != null && !F.coordAprox ? `${F.lat}, ${F.lng}` : "";
   el.innerHTML = `
     <div class="h-row"><h2>${F.id ? "Editar visita" : "Nueva visita"}</h2><button class="btn ghost" data-act="cancelform">Cancelar</button></div>
+    <button type="button" class="btn primary" data-vz="open" style="align-self:flex-start">🎤 Registrar por voz</button>
 
     <div class="panel">${h3i("Cliente y fecha", "book")}
       <div class="grid2">
@@ -2690,6 +2691,162 @@ document.addEventListener("click", async ev => {
   else if (k === "save") casoSave(id || null);
   else if (k === "del") { const c = byId(id); if (c && confirm("¿Eliminar este caso? No se puede deshacer.")) { try { await deleteVisit(c); } catch (e) { toast("No se pudo eliminar."); return; } renderGest(); toast("Caso eliminado"); } }
 });
+
+/* ===== registro por voz: dictado + clasificación por tópico ===== */
+const VZ = { rec: null, on: false, base: "", seg: null, cli: "", fecha: "", prox: "", sup: "", etapas: [], vars: [] };
+const VZ_SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const VZ_KW = {
+  "Reclamo": [/reclam/, /queja/, /mala calidad/, /mal estado/, /llegaron (mal|malas|muy mal|con)/, /\bmuert[ao]s?\b/, /murieron/, /mortalidad/, /no prendieron/, /no prendio/, /defectuos/, /disconforme/, /insatisfech/, /molest[oa]/, /reposicion/, /reponer/, /exige/, /problema con (las )?plantas/],
+  "Riesgo": [/riesgo/, /peligro/, /amenaza/, /preocup/, /botrytis/, /oidio/, /helada/, /plaga/, /aranita/, /\btrips\b/, /sequia/, /falta de agua/, /virus/, /hongo/, /enfermedad/, /estres hidrico/, /podria perder/, /competencia/, /deficit/],
+  "Oportunidad": [/oportunidad/, /interesad/, /quiere probar/, /quiere plantar/, /ampliar/, /ampliacion/, /mas hectareas/, /mas superficie/, /nueva variedad/, /proxima temporada/, /comprar mas/, /potencial/, /cotiz/, /quiere (mas|aumentar)/],
+  "Recomendación": [/recomend/, /sugier/, /sugeri/, /\bhay que\b/, /se debe/, /deberia/, /conviene/, /indique/, /\bindico\b/, /fertiliz/, /\baplicar\b/, /controlar/, /reforzar/, /revisar/, /se le pidio/],
+  "Positivo": [/content[oa]/, /\bbuen[oa]s?\b/, /excelente/, /destac/, /satisfech/, /muy bien/, /vigoros/, /\bsanas?\b/, /alta productividad/, /buen calibre/, /felicit/, /agradec/, /hermos[oa]/, /parejo/]
+};
+const VZ_ORDER = ["Reclamo", "Riesgo", "Oportunidad", "Recomendación", "Positivo"];
+const VZ_CUES = [["Reclamo", /\b(?:reclamos?|quejas?)\b/g], ["Oportunidad", /\boportunidad(?:es)?\b/g], ["Riesgo", /\briesgos?\b/g], ["Recomendación", /\b(?:recomendacion(?:es)?|recomiendo)\b/g], ["Positivo", /\b(?:punto positivo|lo positivo|positivo)\b/g], ["Nota", /\b(?:nota|observacion)\b/g]];
+const VZ_LINK = /\b(?:punto importante|punto destacado|otro punto|siguiente punto|ademas|tambien|por otro lado|por otra parte)\b/g;
+const VZ_NEG = /(?:\bsin|\bningun[oa]?|\bno hay|\bno tiene|\bno hubo|\bno presenta)\s*$/;
+function vzSegments(text) {
+  const out = [], chunks = String(text || "").replace(/(\d)\.(\d)/g, "$1\u0001$2").split(/[.;\n!?]+/).map(s => s.replace(/\u0001/g, ".").trim()).filter(Boolean);
+  for (let ch of chunks) {
+    const n = nrm(ch); if (n.length !== ch.length) ch = n;
+    const cuts = [];
+    for (const [tipo, re] of VZ_CUES) { re.lastIndex = 0; let m; while ((m = re.exec(n))) { if (VZ_NEG.test(n.slice(Math.max(0, m.index - 14), m.index))) continue; cuts.push({ i: m.index, len: m[0].length, tipo }); } }
+    VZ_LINK.lastIndex = 0; { let m; while ((m = VZ_LINK.exec(n))) cuts.push({ i: m.index, len: m[0].length, tipo: null }); }
+    cuts.sort((a, b) => a.i - b.i);
+    const ded = []; for (const c of cuts) { const p = ded[ded.length - 1]; if (p && c.i < p.i + p.len + 2) { if (!p.tipo && c.tipo) { p.tipo = c.tipo; p.len = Math.max(p.len, c.i + c.len - p.i); } continue; } ded.push({ ...c }); }
+    let pos = 0, tipo = null;
+    const push = (a, b, t) => { const s = ch.slice(a, b).replace(/^[\s,:\-–]+|[\s,:\-–]+$/g, ""); if (s.length > 2) out.push({ tipo: t, texto: s.charAt(0).toUpperCase() + s.slice(1) }); };
+    for (const c of ded) { if (c.i > pos) push(pos, c.i, tipo); pos = c.i + c.len; if (c.tipo && /^\s+(de|del|por|en|con|a|que)\b/.test(n.slice(pos))) pos = c.i; tipo = c.tipo; }
+    push(pos, ch.length, tipo);
+  }
+  return out;
+}
+function vzClassify(texto) {
+  let n = nrm(texto); const neg = /\b(?:sin|ningun[oa]?|no hay|no tiene|no hubo|no presenta)\s+(?:\w+\s+)?(?:reclamos?|quejas?|riesgos?|problemas?)\b/g, hadNeg = neg.test(n); n = n.replace(neg, " ");
+  const sc = {};
+  for (const t of VZ_ORDER) sc[t] = VZ_KW[t].reduce((a, re) => a + (re.test(n) ? 1 : 0), 0);
+  let best = null, bs = 0; for (const t of VZ_ORDER) if (sc[t] > bs) { bs = sc[t]; best = t; }
+  return best || (hadNeg ? "Positivo" : null);
+}
+function vzCategoria(n) {
+  if (/muert|mortalidad|prend|falla/.test(n)) return "Mortalidad / prendimiento";
+  if (/enfermed|hongo|plaga|virus|botrytis|oidio|aranita|sanidad/.test(n)) return "Sanidad / enfermedades";
+  if (/entrega|atras|retras|transporte|despacho|flete|llegaron tarde|logistic/.test(n)) return "Entrega y logística";
+  if (/rendimiento|produccion|calibre|sabor|firmeza|no rinde|desempeno/.test(n)) return "Desempeño de la variedad";
+  if (/calidad|debil|vigor|mal estado|chica|delgada|corona|raiz|raices/.test(n)) return "Calidad de plantas";
+  return "Otro";
+}
+function vzSub(n) {
+  if (/nueva variedad|probar (la |una )?variedad|probar/.test(n)) return "Nueva variedad";
+  if (/ampli|hectarea|mas superficie|plantar mas/.test(n)) return "Ampliación de superficie";
+  if (/producto|insumo|bandeja|sustrato/.test(n)) return "Otros productos";
+  return "Otra";
+}
+function vzVars(text) {
+  const n = nrm(text), esc2 = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return allVarieties().filter(v => new RegExp("(^|[^a-z0-9])" + esc2(nrm(v)) + "($|[^a-z0-9])").test(n));
+}
+const VZ_STOP = new Set(["agricola", "sociedad", "spa", "ltda", "limitada", "comercial", "fundo", "hijos", "agro", "de", "la", "el", "los", "las", "del", "y", "e", "sa", "eirl", "cia", "compania", "servicios", "frutales", "agropecuaria", "exportadora"]);
+function vzDirMatch(text, min) {
+  const n = nrm(text); let best = null, bs = 0;
+  for (const name of acNames()) {
+    const toks = nrm(name).split(/[^a-z0-9]+/).filter(t => t.length > 2 && !VZ_STOP.has(t)); if (!toks.length) continue;
+    const hit = toks.filter(t => new RegExp("(^|[^a-z0-9])" + t + "($|[^a-z0-9])").test(n)), tot = toks.reduce((a, t) => a + t.length, 0), got = hit.reduce((a, t) => a + t.length, 0), s = got / tot;
+    if (hit.length && s > bs) { bs = s; best = name; }
+  }
+  return bs >= min ? best : null;
+}
+function vzClient(text) {
+  const n = nrm(text), m = n.match(/(?:visita (?:realizada )?a(?: la| el| los)?|visite a|productor(?:a)?|cliente|estuve (?:en|con)(?: el| la)?|fundo)\s+([a-z0-9 ]{3,50}?)(?=[,.;]|\s+(?:variedad|hoy|ayer|con la|donde|esta|tiene|plantacion|quien|el productor|la productora)|$)/);
+  if (m) { const idx = m.index + m[0].length - m[1].length, cand = text.slice(idx, idx + m[1].length).trim(); const d = vzDirMatch(cand, 0.6); if (d) return d; if (cand) return tcase(cand); }
+  return vzDirMatch(text, 0.99) || "";
+}
+function vzAnalyze(text) {
+  const t = String(text || ""), n = nrm(t), r = { cli: vzClient(t), fecha: todayISO(), prox: "", sup: "", etapas: [], vars: vzVars(t), seg: [] };
+  if (/\bayer\b/.test(n)) r.fecha = addDays(todayISO(), -1);
+  let m = n.match(/proxima visita[^.;]*?(?:en|dentro de)\s+(\d+|un|una|dos|tres|cuatro|cinco|seis)\s+(dias?|semanas?|mes(?:es)?)/);
+  if (m) { const W = { un: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6 }, k = isNaN(+m[1]) ? W[m[1]] : +m[1], u = m[2][0]; r.prox = addDays(todayISO(), u === "d" ? k : u === "s" ? 7 * k : 30 * k); }
+  else if ((m = n.match(/proxima visita[^.;]*?(?:la proxima semana|en una semana)/))) r.prox = addDays(todayISO(), 7);
+  m = n.match(/(\d+(?:[.,]\d+)?)\s*(?:hectareas?|has?\b)/); if (m) r.sup = m[1].replace(",", ".");
+  for (const e of [["floracion", "Floración"], ["cosecha", "Cosecha"], ["crecimiento vegetativo", "Crecimiento vegetativo"], ["establecimiento", "Establecimiento"], ["preparacion de suelo", "Preparación de suelo"], ["fin de temporada", "Fin de temporada"]]) if (n.includes(e[0])) r.etapas.push(e[1]);
+  for (const sg of vzSegments(t)) {
+    const sn = nrm(sg.texto);
+    if (/^proxima visita/.test(sn)) continue;
+    let tipo = sg.tipo || vzClassify(sg.texto) || "Nota";
+    r.seg.push({ tipo, texto: sg.texto, vars: vzVars(sg.texto), cat: tipo === "Reclamo" ? vzCategoria(sn) : "", sub: tipo === "Oportunidad" ? vzSub(sn) : "" });
+  }
+  return r;
+}
+function vzModal() {
+  const el = document.createElement("div"); el.className = "copybox"; el.id = "vz-modal"; VZ.seg = null;
+  el.innerHTML = `<div style="max-height:92vh;overflow:auto"><h3>Registrar por voz</h3>
+    <p class="muted small" style="margin:0">Habla contando la visita. Di el tópico antes de cada punto (<b>reclamo, oportunidad, riesgo, positivo, recomendación, nota</b>) o déjalo sin decirlo y la app lo clasifica por el contenido. Menciona el productor ("visita a …") y las variedades por su nombre.</p>
+    <div class="two">${VZ_SR ? `<button class="btn primary" id="vz-mic" data-vz="mic">🎤 Empezar a dictar</button>` : ""}<span class="muted small" id="vz-st">${VZ_SR ? "" : "Este navegador no permite dictado en vivo. Toca el cuadro y usa el micrófono del teclado del teléfono."}</span></div>
+    <div class="field"><label for="vz-txt">Texto dictado (puedes corregirlo)</label><textarea id="vz-txt" rows="7" placeholder="Ej: Visita a Agrícola Kelleñ, variedad Albion. Positivo: muy buen vigor en las plantas. Riesgo de botrytis por las lluvias. Oportunidad: quiere ampliar 2 hectáreas. Reclamo: llegaron plantas débiles, solicita reposición de 3000 plantas."></textarea></div>
+    <div id="vz-prev"></div>
+    <div class="two"><button class="btn primary" data-vz="an">Analizar y clasificar</button><button class="btn ghost" data-vz="close">Cerrar</button></div></div>`;
+  document.body.appendChild(el);
+}
+function vzPreview() {
+  const r = VZ.seg, el = $("#vz-prev"); if (!el) return;
+  if (!r) { el.innerHTML = ""; return; }
+  const opt = (L, cur) => L.map(x => `<option ${x === cur ? "selected" : ""}>${esc(x)}</option>`).join("");
+  el.innerHTML = `<div class="panel" style="margin:0"><h3>Así quedaría la visita</h3>
+    <div class="field"><label for="vz-cli">Productor</label><input id="vz-cli" data-ac="1" value="${esc(VZ.cli)}" autocomplete="off"></div>
+    <div class="two"><div class="field" style="flex:1;min-width:130px"><label for="vz-fecha">Fecha</label><input id="vz-fecha" type="date" value="${esc(VZ.fecha)}"></div><div class="field" style="flex:1;min-width:130px"><label for="vz-prox">Próxima visita</label><input id="vz-prox" type="date" value="${esc(VZ.prox)}"></div></div>
+    ${VZ.vars.length ? `<div class="muted small">Variedades detectadas: <b>${esc(VZ.vars.join(", "))}</b></div>` : ""}${VZ.sup ? `<div class="muted small">Superficie mencionada: <b>${esc(VZ.sup)} ha</b></div>` : ""}${VZ.etapas.length ? `<div class="muted small">Etapa: <b>${esc(VZ.etapas.join(", "))}</b></div>` : ""}
+    ${r.map((s, i) => `<div class="ditem" style="--c:var(--leaf)"><div class="two"><select data-vzi="${i}" data-vzk="tipo" aria-label="Tópico">${opt(["Nota", ...TIPOS_DEST], s.tipo)}</select>${s.tipo === "Reclamo" ? `<select data-vzi="${i}" data-vzk="cat" aria-label="Categoría">${opt(CATEGORIAS, s.cat)}</select>` : ""}${s.tipo === "Oportunidad" ? `<select data-vzi="${i}" data-vzk="sub" aria-label="Tipo de oportunidad">${opt(SUBS, s.sub)}</select>` : ""}<button class="btn danger" data-vz="rm" data-i="${i}" aria-label="Quitar">✕</button></div>
+      <textarea rows="2" data-vzi="${i}" data-vzk="texto">${esc(s.texto)}</textarea>${s.vars.length ? `<div class="muted small">Variedad: ${esc(s.vars.join(", "))}</div>` : ""}</div>`).join("") || '<p class="muted small">No se detectaron puntos.</p>'}
+    <button class="btn primary" data-vz="apply">Aplicar a la visita</button></div>`;
+}
+function vzStop() { VZ.on = false; try { VZ.rec && VZ.rec.stop(); } catch (e) { } const b = $("#vz-mic"); if (b) b.textContent = "🎤 Empezar a dictar"; const s = $("#vz-st"); if (s) s.textContent = ""; }
+function vzStart() {
+  const ta = $("#vz-txt"), st = $("#vz-st"), btn = $("#vz-mic"); if (!VZ_SR || !ta) return;
+  VZ.base = ta.value ? ta.value.replace(/\s+$/, "") + " " : ""; let fin = "";
+  const rec = VZ.rec = new VZ_SR(); rec.lang = "es-CL"; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = ev => { let it = ""; for (let i = ev.resultIndex; i < ev.results.length; i++) { const r = ev.results[i]; if (r.isFinal) fin += r[0].transcript.trim() + ". "; else it += r[0].transcript; } ta.value = VZ.base + fin + it; };
+  rec.onerror = ev => { if (ev.error === "not-allowed" || ev.error === "service-not-allowed") { VZ.on = false; if (st) st.textContent = "Sin permiso de micrófono. Actívalo en los ajustes del navegador o usa el micrófono del teclado."; if (btn) btn.textContent = "🎤 Empezar a dictar"; } else if (ev.error !== "no-speech" && ev.error !== "aborted" && st) st.textContent = "Error de dictado: " + ev.error; };
+  rec.onend = () => { if (VZ.on) { VZ.base = ta.value ? ta.value.replace(/\s+$/, "") + " " : ""; fin = ""; try { rec.start(); } catch (e) { VZ.on = false; } } else if (btn) btn.textContent = "🎤 Empezar a dictar"; };
+  try { rec.start(); VZ.on = true; btn.textContent = "⏹ Detener"; if (st) st.textContent = "Escuchando…"; } catch (e) { if (st) st.textContent = "No se pudo iniciar el micrófono."; }
+}
+function vzApply() {
+  if (!S.form) openForm(); else { try { if ($("#f-cliente")) collectForm(); } catch (e) { } }
+  const F = S.form, cli = ($("#vz-cli") || {}).value || VZ.cli;
+  if (cli) { F.cliente = cli; if (dirRow(cli)) { show("form"); renderForm(); try { applyClientDir(cli); collectForm(); } catch (e) { } } }
+  F.fecha = ($("#vz-fecha") || {}).value || F.fecha; if ($("#vz-prox") && $("#vz-prox").value) F.proxima = $("#vz-prox").value;
+  F.variedades = uniq([...(F.variedades || []), ...VZ.vars, ...VZ.seg.flatMap(s => s.vars)]);
+  if (VZ.sup && !F.superficie) F.superficie = VZ.sup;
+  F.etapas = uniq([...(F.etapas || []), ...VZ.etapas]);
+  const notas = [];
+  for (const s of VZ.seg) {
+    if (s.tipo === "Nota") { notas.push(s.texto); continue; }
+    const d = { ...newDest(s.tipo), texto: s.texto }, vs = s.vars.length ? s.vars : (F.variedades.length === 1 ? F.variedades : []);
+    if (vs.length) { d.variedades = vs; d.variedad = vs.join(", "); }
+    if (s.tipo === "Reclamo") { d.categoria = s.cat || d.categoria; const rn = nrm(s.texto), m = rn.match(/(?:reposicion|reponer|reposicion de)[^0-9]{0,30}(\d[\d.]*)\s*plantas?/) || rn.match(/(\d[\d.]*)\s*plantas?[^.]{0,20}reposicion/); if (m) { d.repo = true; d.repoCant = String(m[1]).replace(/\./g, ""); } }
+    if (s.tipo === "Oportunidad") d.sub = s.sub || d.sub;
+    F.destacados.push(d);
+  }
+  if (notas.length) F.notas = (F.notas ? F.notas.replace(/\s+$/, "") + "\n" : "") + notas.join("\n");
+  vzStop(); const m = $("#vz-modal"); if (m) m.remove();
+  show("form"); renderForm(); renderEtapas(); toast("Visita completada por voz. Revisa y guarda.");
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest && ev.target.closest("[data-vz]"); if (!t) return;
+  const k = t.dataset.vz;
+  if (k === "open") { if (!canEdit()) { toast("Tu cuenta es de solo lectura."); return; } if (S.view !== "form") openForm(); vzModal(); }
+  else if (k === "mic") { VZ.on ? vzStop() : vzStart(); }
+  else if (k === "close") { vzStop(); const m = $("#vz-modal"); if (m) m.remove(); }
+  else if (k === "an") { vzStop(); const txt = ($("#vz-txt") || {}).value || ""; if (txt.trim().length < 5) { toast("Dicta o escribe primero la visita."); return; } const r = vzAnalyze(txt); VZ.seg = r.seg; VZ.cli = r.cli; VZ.fecha = r.fecha; VZ.prox = r.prox; VZ.sup = r.sup; VZ.etapas = r.etapas; VZ.vars = r.vars; vzPreview(); const p = $("#vz-prev"); if (p) p.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  else if (k === "rm") { VZ.seg.splice(+t.dataset.i, 1); vzPreview(); }
+  else if (k === "apply") vzApply();
+});
+document.addEventListener("change", ev => {
+  const t = ev.target; if (!t.dataset || t.dataset.vzi == null || !VZ.seg) return;
+  const s = VZ.seg[+t.dataset.vzi]; if (!s) return; s[t.dataset.vzk] = t.value;
+  if (t.dataset.vzk === "tipo") { const n = nrm(s.texto); s.cat = s.tipo === "Reclamo" ? vzCategoria(n) : ""; s.sub = s.tipo === "Oportunidad" ? vzSub(n) : ""; vzPreview(); }
+});
+document.addEventListener("input", ev => { const t = ev.target; if (t.dataset && t.dataset.vzk === "texto" && VZ.seg && VZ.seg[+t.dataset.vzi]) VZ.seg[+t.dataset.vzi].texto = t.value; if (t.id === "vz-cli") VZ.cli = t.value; });
 
 /* ===================== eventos ===================== */
 let armed = null;
