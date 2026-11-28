@@ -1195,7 +1195,11 @@ def enviar(archivo, resumen, mes):
 if __name__ == "__main__":
     hoy = date.fromisoformat(os.environ["HOY"]) if os.environ.get("HOY") else datetime.now(TZ).date()
     if os.environ.get("MES"):
-        y, m = map(int, os.environ["MES"].split("-")[:2])
+        # Acepta AAAA-MM, AA-MM, MM-AAAA o MM/AAAA (un año de 2 dígitos se entiende como 20AA)
+        import re
+        a, b = map(int, re.findall(r"\d+", os.environ["MES"])[:2])
+        y, m = (a, b) if b <= 12 and (a > 12 or a >= 100) else (b, a)
+        y = y + 2000 if y < 100 else y
         mes = date(y, m, 1)
         if (y, m) != (hoy.year, hoy.month):
             hoy = (mes.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
