@@ -249,6 +249,10 @@ def construir(hoy):
     sem = sorted([v for v in visitas if lunes.isoformat() <= str(v.get("fecha", ""))[:10] <= domingo.isoformat()],
                  key=lambda v: (v.get("fecha", ""), v.get("cliente", "")))
     ag_sem = [a for a in agenda if lunes.isoformat() <= str(a.get("fecha", ""))[:10] <= domingo.isoformat()]
+    # Registros hechos en la app sin visita presencial (reclamo, riesgo u oportunidad agregados como "caso"):
+    # no cuentan como visitas, pero sus reclamos, riesgos y oportunidades sí se informan.
+    pres = [v for v in sem if not v.get("caso")]
+    casos = [v for v in sem if v.get("caso")]
 
     ss = getSampleStyleSheet()
     H1 = ParagraphStyle("H1", parent=ss["Heading1"], fontName="Helvetica-Bold", fontSize=17, textColor=VERDE,
@@ -278,9 +282,9 @@ def construir(hoy):
 
     el = []
     productores = OrderedDict()
-    for v in sem:
+    for v in pres:
         productores.setdefault((v.get("cliente") or "Sin nombre").strip(), []).append(v)
-    regiones = Counter(v.get("region") or "Sin región" for v in sem)
+    regiones = Counter(v.get("region") or "Sin región" for v in pres)
     reclamos = [(v, d) for v in sem for d in v["destacados"] if d.get("tipo") == "Reclamo"]
     oport = [(v, d) for v in sem for d in v["destacados"] if d.get("tipo") == "Oportunidad"]
     riesgos = [(v, d) for v in sem for d in v["destacados"] if d.get("tipo") == "Riesgo"]
@@ -297,7 +301,7 @@ def construir(hoy):
     else:
         el.extend(titulo)
     el.append(Spacer(1, 10))
-    kpis = [(len(sem), "visitas"), (len(productores), "productores"), (len(regiones), "regiones"),
+    kpis = [(len(pres), "visitas"), (len(productores), "productores"), (len(regiones), "regiones"),
             (len(reclamos), "reclamos"), (len(oport), "oportunidades")]
     kt = Table([[Paragraph(str(n), KPI) for n, _ in kpis], [Paragraph(t, KPL) for _, t in kpis]],
                colWidths=[3.3 * cm] * 5)
@@ -315,33 +319,47 @@ def construir(hoy):
         abiertos = [x for x in reclamos if x[1].get("estado") != "Resuelto"]
         if reclamos:
             claves.append(f"{len(reclamos)} reclamo(s) registrados; {len(abiertos)} siguen abiertos o en gestión.")
-        criticos = [v for v in sem if estado_visita(v) in ("Crítico", "Regular")]
+        criticos = [v for v in pres if estado_visita(v) in ("Crítico", "Regular")]
         if criticos:
             claves.append("Plantaciones en estado Regular o Crítico: " +
                           ", ".join(sorted({esc(v.get('cliente')) for v in criticos})) + ".")
-        fito = [v for v in sem if v.get("fito") == "Problema"]
+        fito = [v for v in pres if v.get("fito") == "Problema"]
         if fito:
             claves.append(f"{len(fito)} visita(s) con problema fitosanitario detectado.")
         if oport:
             claves.append(f"{len(oport)} oportunidad(es) comercial(es) para derivar a Ventas.")
-        top = regiones.most_common(1)[0]
-        claves.append(f"Región con más visitas: {esc(top[0])} ({top[1]}).")
+        if casos:
+            claves.append(f"{len(casos)} caso(s) registrados sin visita presencial (no se cuentan como visitas).")
+        if regiones:
+            top = regiones.most_common(1)[0]
+            claves.append(f"Región con más visitas: {esc(top[0])} ({top[1]}).")
         for c in claves:
             el.append(Paragraph("• " + c, P))
 
         # zonas y productores
         el.append(Paragraph("Zonas y productores visitados", H2))
         filas = [["Fecha", "Productor", "Región / comuna", "Tipo", "Variedades", "Estado"]]
-        for v in sem:
+        for v in pres:
             filas.append([fdate(v.get("fecha")), v.get("cliente", ""),
                           " / ".join(x for x in [v.get("region"), v.get("comuna")] if x),
                           v.get("tipo", ""), ", ".join(v["variedades"]) or "—", estado_visita(v) or "—"])
-        el.append(tabla(filas, [2.3, 3.6, 3.3, 2.4, 3.5, 2.0]))
+        if pres:
+            el.append(tabla(filas, [2.3, 3.6, 3.3, 2.4, 3.5, 2.0]))
+        else:
+            el.append(Paragraph("Sin visitas presenciales esta semana.", P))
+        if casos:
+            el.append(Paragraph("Casos registrados sin visita presencial", H3))
+            filas = [["Fecha", "Productor", "Medio", "Registro"]]
+            for v in casos:
+                reg_txt = "; ".join(f"{d.get('tipo')}: {d.get('texto') or ''}" for d in v["destacados"]) or "—"
+                filas.append([fdate(v.get("fecha")), v.get("cliente", ""), v.get("medio") or "—", reg_txt])
+            el.append(tabla(filas, [2.3, 3.6, 2.8, 8.4]))
 
         # gráficos
         el.append(Paragraph("Gráficos", H2))
         reg = regiones.most_common()
-        el.append(grafico_barras([r for r, _ in reg], [n for _, n in reg], "Visitas por región", horizontal=True))
+        if reg:
+            el.append(grafico_barras([r for r, _ in reg], [n for _, n in reg], "Visitas por región", horizontal=True))
 
         # reclamos
         el.append(Paragraph("Reclamos", H2))
@@ -481,7 +499,7 @@ def construir(hoy):
                             title="Resumen semanal de visitas - Agrícola Llahuen")
     doc.build(el, onFirstPage=pie, onLaterPages=pie)
 
-    resumen = (f"Semana del {largo(lunes)} al {largo(domingo)}: {len(sem)} visitas a {len(productores)} "
+    resumen = (f"Semana del {largo(lunes)} al {largo(domingo)}: {len(pres)} visitas a {len(productores)} "
                f"productores en {len(regiones)} regiones; {len(reclamos)} reclamos y {len(oport)} oportunidades.")
     return nombre_pdf, resumen
 
