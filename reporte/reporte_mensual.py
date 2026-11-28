@@ -721,13 +721,17 @@ def construir(mes, hoy, autor):
     fin = (mes.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
     corte = min(fin, hoy)
     docs = [migrar(d) for d in cargar_docs() if not d.get("ejemplo")]
-    vis = sorted([v for v in docs if not v.get("prog") and ini.isoformat() <= str(v.get("fecha", ""))[:10] <= corte.isoformat()],
-                 key=lambda v: (v.get("fecha", ""), v.get("creado") or 0))
+    todos = sorted([v for v in docs if not v.get("prog") and ini.isoformat() <= str(v.get("fecha", ""))[:10] <= corte.isoformat()],
+                   key=lambda v: (v.get("fecha", ""), v.get("creado") or 0))
+    # Reclamos, riesgos u oportunidades agregados en la app sin visita presencial ("caso"):
+    # no cuentan como visitas, pero sus registros sí se informan.
+    vis = [v for v in todos if not v.get("caso")]
+    casos = [v for v in todos if v.get("caso")]
     agenda = sorted([a for a in docs if a.get("prog") and a.get("estado") == "pendiente"
                      and hoy.isoformat() < str(a.get("fecha", ""))[:10] <= (hoy + timedelta(days=28)).isoformat()],
                     key=lambda a: (a.get("fecha", ""), a.get("hora", "")))
-    ops = [(v, d) for v in vis for d in v["destacados"] if d.get("tipo") == "Oportunidad"]
-    recs = [(v, d) for v in vis for d in v["destacados"] if d.get("tipo") == "Reclamo"]
+    ops = [(v, d) for v in todos for d in v["destacados"] if d.get("tipo") == "Oportunidad"]
+    recs = [(v, d) for v in todos for d in v["destacados"] if d.get("tipo") == "Reclamo"]
     nuevas_tot = sorted({n for v in vis for n in v["variedades"] if es_nueva(v, n)})
     mes_txt = MESES[ini.month - 1]
     rango = f"{ini.day} al {corte.day} de {mes_txt} de {ini.year}"
@@ -1060,6 +1064,23 @@ def construir(mes, hoy, autor):
             if any(es_nueva(v, n) for n in v["variedades"]):
                 nuevas_slide(v)
 
+    # casos registrados sin visita presencial (no cuentan como visitas)
+    for k in range(0, len(casos), 4):
+        s = D.slide()
+        D.marco(s, "Casos sin visita presencial", "Reclamos, riesgos y oportunidades registrados por llamado u otro medio")
+        for i, v in enumerate(casos[k:k + 4]):
+            f, c = divmod(i, 2)
+            x, y = 0.6 + c * 6.17, 1.6 + f * 2.75
+            D.rect(s, x, y, 5.97, 2.55, GRIS_CLARO, MSO_SHAPE.ROUNDED_RECTANGLE, 0.05)
+            tipos = sorted({d.get("tipo") for d in v["destacados"] if d.get("tipo")})
+            es_rec = any(t in ("Reclamo", "Riesgo") for t in tipos)
+            D.icono(s, "frutilla" if es_rec else "hoja", x + 0.22, y + 0.22, 0.6, (251, 227, 230) if es_rec else (230, 240, 232))
+            D.texto(s, x + 0.95, y + 0.2, 4.8, 0.4, corta(v.get("cliente"), 48), 12.5, TEXTO, True)
+            D.texto(s, x + 0.95, y + 0.55, 4.8, 0.3, f"{fd(v.get('fecha'))} · {v.get('medio') or 'Sin medio indicado'}", 10, GRIS)
+            D.chip(s, x + 0.22, y + 0.97, " · ".join(tipos) or "Registro")
+            txt = " · ".join(f"{d.get('tipo')}: {d.get('texto') or ''}" for d in v["destacados"])
+            D.texto(s, x + 0.22, y + 1.35, 5.5, 1.1, corta(txt, 260), 10, TEXTO)
+
     # 6. oportunidades (tarjetas con ícono, como "Complete toolkit")
     for k in range(0, max(len(ops), 1), 6):
         s = D.slide()
@@ -1123,9 +1144,36 @@ def construir(mes, hoy, autor):
 
     nombre = f"Reporte_mensual_visitas_Llahuen_{ini.year}-{ini.month:02d}.pptx"
     D.p.save(nombre)
+    achicar_pptx(nombre)
     resumen = (f"{mes_txt.capitalize()} {ini.year}: {len(vis)} visitas a {len({v.get('cliente') for v in vis})} productores; "
                f"{len(recs)} reclamos y {len(ops)} oportunidades.")
     return nombre, resumen
+
+
+def achicar_pptx(ruta, limite=15_000_000):
+    """Gmail rechaza correos sobre 25 MB (el adjunto crece ~35 % al codificarse).
+    Si la presentación pasa el límite, recomprime las fotos JPG hasta que quepa."""
+    import zipfile
+    for lado, calidad in [(1100, 72), (900, 66), (720, 60), (560, 55), (440, 50)]:
+        if os.path.getsize(ruta) <= limite:
+            return
+        tmp = ruta + ".tmp"
+        with zipfile.ZipFile(ruta) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+            for it in zin.infolist():
+                data = zin.read(it.filename)
+                if it.filename.startswith("ppt/media/") and it.filename.lower().endswith((".jpg", ".jpeg")):
+                    try:
+                        im = PILImage.open(io.BytesIO(data)).convert("RGB")
+                        im.thumbnail((lado, lado))
+                        b = io.BytesIO()
+                        im.save(b, "JPEG", quality=calidad, optimize=True)
+                        if len(b.getvalue()) < len(data):
+                            data = b.getvalue()
+                    except Exception:
+                        pass
+                zout.writestr(it, data)
+        os.replace(tmp, ruta)
+    print(f"Tamaño final de la presentación: {os.path.getsize(ruta) / 1e6:.1f} MB")
 
 
 def enviar(archivo, resumen, mes):
